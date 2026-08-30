@@ -216,3 +216,9 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Raw telemetry session captures (kept local, not versioned)
+logs/
+
+# Generated channel-discovery output (regenerated per run; curated knowledge lives in references/)
+channels*.txt
