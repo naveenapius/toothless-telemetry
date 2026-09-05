@@ -53,6 +53,10 @@ def expand_uuid(short: str) -> str:
 ELM_EOL = "\r"
 ELM_PROMPT = ">"
 
+# After a timed-out command, poll the notify buffer this often; once it stops
+# growing we treat the straggler response as fully arrived and discard it.
+_DRAIN_QUIET = 0.12
+
 # --- Standard OBD-II PIDs worth trying, with decoders -----------------------
 # Each: request -> (metric name, unit, decode(list_of_data_bytes) -> value).
 # These are the *standard* car PIDs; the MT-15 may only answer a subset (that's
@@ -205,6 +209,18 @@ class ELM327BLE:
             timed_out = True
         text = self._buffer.decode(errors="replace").replace(ELM_PROMPT, "").strip()
         self.log.rx(cmd, text, timed_out=timed_out)
+        if timed_out:
+            # No prompt seen -> this command's real response may still be in
+            # flight (common right after an ATSP auto-search, or on a slow ECU).
+            # If we returned now, that straggler would land in the NEXT command's
+            # buffer and desync every response by one (the F415->F421 bleed we saw
+            # in the gear hunt). Wait for the buffer to go quiet, then drop it, so
+            # the next command starts clean.
+            prev = -1
+            while len(self._buffer) != prev:
+                prev = len(self._buffer)
+                await asyncio.sleep(_DRAIN_QUIET)
+            self._buffer.clear()
         if settle:
             await asyncio.sleep(settle)
         return text
