@@ -222,3 +222,9 @@ logs/
 
 # Generated channel-discovery output (regenerated per run; curated knowledge lives in references/)
 channels*.txt
+
+# Mosquitto broker password file (hashed credentials — secret, never commit)
+infra/mosquitto/passwd
+
+# ESP32 firmware secrets (WiFi + broker credentials — never commit)
+firmware/toothless-edge/include/config.h

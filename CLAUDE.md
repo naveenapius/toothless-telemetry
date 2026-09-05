@@ -38,7 +38,6 @@ passion and the hook. Built in public (LinkedIn + Instagram), iterating toward a
 
 **Later additions:**
 - SN65HVD230 CAN transceiver (direct-CAN build)
-- MicroSD module (store-and-forward buffering)
 - IMU (MPU-6050 — lean angle, G-force)
 - GPS module (position/route)
 - Buck converter (permanent/switched power tap)
@@ -67,9 +66,12 @@ switched/ignition-line power tap is deferred to the permanent-install stage.
 **Pipeline:** `MQTT (Mosquitto) → InfluxDB (time-series) → Grafana (dashboards + alerting)`.
 Runs on the Mac now; Pi / home server later.
 
-**Store-and-forward:** ESP32 buffers to SD card when off-network (riding), replays when back
-in WiFi range. "Live-from-anywhere" (self-hosted mesh VPN / own domain, **avoiding cloud
-subscriptions**) is a later advanced chapter.
+**Live-only (store-and-forward DROPPED):** the bike publishes live or not at all — SD-card
+buffering was abandoned because it trades away the live-telemetry payoff that is the whole
+point of the build. **"Live-from-anywhere" is achieved by pointing the edge node at a
+publicly-reachable broker** (a self-hosted VPS — **avoiding cloud subscriptions**), not by
+buffering: MQTT clients connect *outbound*, so no inbound routing into a home LAN is needed.
+That VPS move is a later chapter; a local LAN broker on the Mac is the current setup.
 
 **Languages:**
 - **Firmware:** C++/Arduino on the ESP32 (better BLE/CAN/MQTT library support than
