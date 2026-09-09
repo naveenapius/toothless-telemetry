@@ -1,5 +1,14 @@
 # Toothless Telemetry — Motorcycle Telemetry & Observability Pipeline
 
+## Working mode (READ FIRST — applies to every session)
+
+**Discussion is for planning. Do NOT write, edit, or delete any files — or run any
+mutating/`chmod`/install commands — until the owner explicitly says to.** Default to
+talking through the design, tradeoffs, and the exact plan first. Building starts only on a
+clear go-ahead ("write it", "do it", "go ahead", etc.). Read-only exploration (reading files,
+searching, looking things up) is fine without asking; producing artifacts is not. When a plan
+is ready, summarize what you *would* create and wait.
+
 ## What this is
 
 A telemetry/observability pipeline that pulls live data off a motorcycle, ships it
@@ -41,6 +50,9 @@ passion and the hook. Built in public (LinkedIn + Instagram), iterating toward a
 - IMU (MPU-6050 — lean angle, G-force)
 - GPS module (position/route)
 - Buck converter (permanent/switched power tap)
+- **SD module — deferred, not dropped.** The durable tier for the store-and-forward buffer
+  (whole-ride offline capture that survives power loss). Not needed for the current volatile
+  PSRAM buffer; add when power-loss survival is wanted. See Architecture.
 
 ## Computer situation
 
@@ -63,15 +75,38 @@ transceiver later), normalizes each reading into the shape above, and publishes 
 via **MQTT**. Powered by a **power bank** during development (no bike wiring yet); the
 switched/ignition-line power tap is deferred to the permanent-install stage.
 
-**Pipeline:** `MQTT (Mosquitto) → InfluxDB (time-series) → Grafana (dashboards + alerting)`.
-Runs on the Mac now; Pi / home server later.
+**Pipeline:** `MQTT (Mosquitto) → InfluxDB (time-series) → <viz>`. The visualization layer is
+**not yet decided** — Grafana is the strong favorite (native Influx, alerting, and the tool the
+target observability jobs use), but a deliberate comparison vs. alternatives is a pending step,
+not a foregone conclusion. Runs on the Mac now; Pi / home server later.
 
-**Live-only (store-and-forward DROPPED):** the bike publishes live or not at all — SD-card
-buffering was abandoned because it trades away the live-telemetry payoff that is the whole
-point of the build. **"Live-from-anywhere" is achieved by pointing the edge node at a
-publicly-reachable broker** (a self-hosted VPS — **avoiding cloud subscriptions**), not by
-buffering: MQTT clients connect *outbound*, so no inbound routing into a home LAN is needed.
-That VPS move is a later chapter; a local LAN broker on the Mac is the current setup.
+**Live-first, with a store-and-forward safety net.** Publish live when connected; buffer
+while in a dead zone; on reconnect, flush the backlog *and* resume live. Live telemetry is
+never traded away — buffering is a safety net beneath it, not an alternative to it. This is
+possible precisely because every message carries its **own `ts`**: a reading buffered in a
+tunnel and flushed minutes later lands in InfluxDB at the moment it was *recorded*, so the
+graph back-fills with no gap and no time-smear.
+  - **Buffer medium (now): PSRAM ring buffer — volatile, no new hardware.** The ESP32-S3
+    (N16R8) has 8 MB PSRAM, enormous for RPM+speed. A bounded ring buffer (drop-oldest when
+    full) absorbs tunnels/dead zones/hotspot hiccups *within a continuous power session*.
+  - **Explicitly NOT surviving power loss (for now).** If a dead zone is still active when the
+    ignition is cut, that buffered data is lost — accepted, because ignition-off means the bike
+    is producing no data anyway. Durable buffering (flash via LittleFS, or an SD card for
+    whole-ride offline capture) is a **later tier**, not built yet.
+  - **Design discipline:** the buffer is written behind an **append/drain interface** from day
+    one. PSRAM backing today; swapping in a flash/SD backing later for power-loss survival is a
+    storage-backend change, not a re-architecture. ("Design now, add durability later.")
+- **Note (history):** store-and-forward was briefly *dropped* entirely (see older handoff
+  notes) on the reasoning that SD-card replay traded away the live payoff. That conflated the
+  *concept* (don't lose data in a dead zone) with one heavy *medium* (an SD module). The
+  concept is back — as a live-first, in-RAM safety net — without the hardware.
+
+**"Live-from-anywhere"** is achieved by pointing the edge node at a **publicly-reachable
+broker** (a self-hosted VPS — **avoiding cloud subscriptions**): MQTT clients connect
+*outbound*, so no inbound routing into a home LAN is needed. That VPS move is a later chapter;
+a local LAN broker on the Mac is the current setup. (Buffering and the public broker are
+complementary — the broker gives reach when you *have* signal; the buffer covers when you
+don't.)
 
 **Languages:**
 - **Firmware:** C++/Arduino on the ESP32 (better BLE/CAN/MQTT library support than
@@ -123,13 +158,17 @@ G-force), GPS (position/route), TPMS (tire pressure).
 
 ## Where we are / next step
 
-**Immediate next step:** pull real data from the bike over **BLE using Python (Bleak) on the
-Mac**:
-1. Connect to **"OBDII"**.`
-2. Subscribe to notify `0xFFF1`, write to `0xFFF2`.
-3. Send `ATZ` → `ATDPN` (confirm protocol/CAN) → `0100` → `010C`.
-4. Confirm live **RPM** off the idling bike.
+See `docs/HANDOFF.md` for the authoritative current state, decisions, and gotchas.
 
-**Then:** stand up the pipeline (Mosquitto → InfluxDB → Grafana) and the PID-discovery
-process. The **ESP32 comes in afterward** to make acquisition mobile, **reusing the same BLE
-UUIDs**.
+**Done:** BLE/ELM327 acquisition proven on the Mac (`scripts/ble_logger.py` — live RPM off the
+idling bike; protocol confirmed `A6` = ISO 15765, 500 kbps, 11-bit). Gear-signal hunt settled
+and archived (poll-only port; gear deferred to ratio-derivation + a v2 direct-CAN tap). First
+**untethered edge node** built: ESP32-S3 → WiFi → authenticated MQTT → Mosquitto on the Mac,
+publishing a heartbeat off a power bank (`firmware/toothless-edge/`, `infra/mosquitto/`).
+
+**Immediate next step:** fold the proven BLE/ELM327 polling into `firmware/toothless-edge` so
+the edge node publishes real **RPM + speed** as `{ts,source,metric,value}` instead of a
+heartbeat (reuse UUIDs `FFF0/FFF2/FFF1`).
+
+**Then:** stand up the pipeline (Mosquitto → InfluxDB → viz TBD), fake data first; build the
+gear-from-ratio analyzer; housekeeping (DHCP reservation, TLS before any public VPS).

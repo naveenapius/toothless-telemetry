@@ -23,9 +23,21 @@ tail.
 New this session: `firmware/toothless-edge/` (PlatformIO/Arduino edge firmware) and
 `infra/mosquitto/` (broker config-as-code). Working branch: **`groundwork`**.
 
-**Key scope change:** **store-and-forward (SD-card buffering) is ABANDONED.** It trades away the
-live-telemetry wow factor that is the whole point of the build. The bike publishes live or not at
-all. (CLAUDE.md still lists it under architecture + hardware — that's now stale; see §8.)
+**Key scope change (REVISITED 2026-09-08):** store-and-forward is **back** — but reframed.
+It was briefly dropped on the reasoning that *SD-card replay* trades away the live payoff; that
+conflated the **concept** (don't lose data in a dead zone) with one heavy **medium** (an SD
+module). On a bike you *will* ride through no-coverage areas, so the concept is needed. The
+resolution: **live-first with a store-and-forward safety net** — publish live when connected,
+buffer while offline, flush-with-original-`ts` on reconnect (Influx back-fills correctly), and
+resume live. Live is never traded away.
+- **Now:** a bounded **PSRAM ring buffer** (8 MB on the N16R8) — volatile, **no new hardware**.
+  Covers dead zones *within a continuous power session*.
+- **Explicitly deferred:** surviving **power loss** (accepted loss — ignition-off = no data
+  anyway) and **whole-ride offline** capture. Those need a durable tier (flash via LittleFS, or
+  the **SD module — deferred, not dropped**). Build the buffer behind an **append/drain
+  interface** so adding a durable backing later is a backend swap, not a re-architecture.
+
+See CLAUDE.md → Architecture for the settled version.
 
 ---
 
@@ -62,7 +74,8 @@ all. (CLAUDE.md still lists it under architecture + hardware — that's now stal
 - **Visualisation: UNDECIDED.** Grafana is the strong favourite (native Influx, alerting, and it's the
   tool the target observability jobs use), but a deliberate comparison vs. alternatives is a pending
   step, not a foregone conclusion. Don't assume Grafana in code until it's chosen.
-- **Store-and-forward: DROPPED** (see §0). Live or nothing.
+- **Store-and-forward: live-first safety net** (see §0, REVISITED 2026-09-08). Volatile PSRAM
+  buffer now; durable/whole-ride tiers deferred. (Was briefly dropped — no longer.)
 - **Security posture:** auth (username/password) is in place on the broker **now**, so it carries to
   the VPS. **TLS (port 8883) is the one thing to add before the broker is ever exposed publicly** —
   it's deferred, not forgotten. On the LAN, plaintext-with-auth is an accepted temporary posture.
@@ -128,8 +141,9 @@ all. (CLAUDE.md still lists it under architecture + hardware — that's now stal
   `esp32-s3-devkitc-1` def = 8 MB/no-PSRAM, which is fine — under-declaring flash is safe), a **power
   bank**, the **ELM327 BLE clone** dongle (name "OBDII", service `FFF0`, write `FFF2`, notify `FFF1`),
   MODAXE 6-pin adapter. On **macOS** (BLE works natively via CoreBluetooth).
-- **Not owned:** SN65HVD230 CAN transceiver (for the v2 direct-CAN gear tap — see §6). **microSD module
-  is no longer planned** (store-and-forward dropped).
+- **Not owned:** SN65HVD230 CAN transceiver (for the v2 direct-CAN gear tap — see §6). **SD module
+  deferred, not dropped** — the durable tier for whole-ride offline buffering (see §0); the current
+  buffer is volatile PSRAM, no SD needed yet.
 - **PlatformIO CLI** (`pio`) isn't on PATH by default — it's at `~/.platformio/penv/bin/pio` (add to
   PATH, or use the VS Code buttons).
 
@@ -174,12 +188,13 @@ shift points, zero extra hardware. The analyzer is **not built yet** (§7). Real
   **uncommitted** — check `git status`.
 - **Gitignored secrets** (verified with `git check-ignore`): `infra/mosquitto/passwd`,
   `firmware/toothless-edge/include/config.h`. Also ignored: `firmware/toothless-edge/.pio` and `.vscode/`.
-- **Stale doc to fix:** `CLAUDE.md` still lists **store-and-forward / microSD** under Architecture and
-  Hardware — that path is dropped (§0). Update CLAUDE.md (and the `project-toothless-telemetry` memory)
-  to reflect: live-only, no SD buffering.
+- **Docs reconciled (2026-09-08):** CLAUDE.md Architecture + Hardware now describe the live-first
+  store-and-forward design (volatile PSRAM now, durable/SD tiers deferred), and the viz layer is
+  marked undecided rather than assuming Grafana. The `project-toothless-telemetry` memory reflects
+  the same. No known stale references remain.
 
 ## 9. Pointers
-- `CLAUDE.md` — project context (note the stale store-and-forward references, §8).
+- `CLAUDE.md` — project context (Architecture section has the settled store-and-forward design).
 - `docs/devlog/2026-09-06-first-edge-node.md` — this session: the edge node + architecture decisions.
 - `docs/devlog/2026-08-30-*`, `2026-09-01-*` — the gear-signal hunt (archived).
 - `infra/mosquitto/README.md` — broker setup + test.
