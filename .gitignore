@@ -231,3 +231,7 @@ firmware/toothless-edge/include/config.h
 .vscode/
 logs/
 channels*.txt
+
+# Internal handoff / operational runbook — local only, never commit
+# (contains host specifics that must not live in version control)
+docs/HANDOFF.md
