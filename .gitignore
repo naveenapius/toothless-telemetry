@@ -220,8 +220,8 @@ __marimo__/
 # --- Broker secrets (generated on the box / locally — NEVER commit) ---
 # Hashed credential stores and TLS private material for the MQTT brokers.
 infra/mosquitto/passwd
-infra/mosquitto/vps/passwd
-infra/mosquitto/vps/certs/
+infra/vps/passwd
+infra/vps/certs/
 
 # --- ESP32 firmware secrets (WiFi + broker credentials) ---
 firmware/toothless-edge/include/config.h
