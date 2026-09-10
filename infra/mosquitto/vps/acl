@@ -1,0 +1,9 @@
+# Toothless Telemetry — MQTT access control list (config-as-code, safe to commit).
+#
+# With acl_file set + allow_anonymous false, an authenticated user gets ONLY the
+# access granted here. Anyone not listed gets nothing. This scopes the `toothless`
+# user (the ESP32 publisher + the Mac subscriber) to the project's own topic tree,
+# so a leaked credential can't read or write anything outside toothless/#.
+
+user toothless
+topic readwrite toothless/#

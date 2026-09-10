@@ -216,3 +216,22 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# --- Broker secrets (generated on the box / locally — NEVER commit) ---
+# Hashed credential stores and TLS private material for the MQTT brokers.
+infra/mosquitto/passwd
+infra/mosquitto/vps/passwd
+infra/mosquitto/vps/certs/
+
+# --- ESP32 firmware secrets (WiFi + broker credentials) ---
+firmware/toothless-edge/include/config.h
+
+# --- Build output / editor / generated (regenerated, not versioned) ---
+.pio/
+.vscode/
+logs/
+channels*.txt
+
+# Internal handoff / operational runbook — local only, never commit
+# (contains host specifics that must not live in version control)
+docs/HANDOFF.md
