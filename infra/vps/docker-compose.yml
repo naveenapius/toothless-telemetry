@@ -1,0 +1,68 @@
+# Toothless Telemetry — the pipeline stack, containerized.
+# Deploy on the VPS: `docker compose up -d` from this directory.
+#
+# Services:
+#   mosquitto — public MQTT broker (TLS 8883, the only PUBLISHED port).
+#   influxdb  — time-series store (NOT published; reached in-network + via SSH tunnel).
+#   telegraf  — the MQTT->InfluxDB bridge (no ports; talks to both over the internal network).
+#
+# Secrets are generated ON THE BOX and never committed (see the repo .gitignore):
+#   passwd, certs/  — broker credentials + TLS material (mounted read-only below).
+#   .env            — InfluxDB admin creds/token + Telegraf's broker password (see .env.example).
+#                     Docker Compose auto-loads .env in this directory for ${VAR} substitution.
+
+services:
+  mosquitto:
+    image: eclipse-mosquitto:2.0.20
+    container_name: toothless-mosquitto
+    restart: unless-stopped
+    ports:
+      # ONLY 8883 (TLS) is exposed to the host/internet. The internal 1883 listener
+      # (see mosquitto.conf) is deliberately NOT published — it exists only on the
+      # docker network, for in-stack services like Telegraf.
+      - "8883:8883"
+    volumes:
+      - ./mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+      - ./passwd:/mosquitto/config/passwd:ro
+      - ./acl:/mosquitto/config/acl:ro
+      - ./certs:/mosquitto/config/certs:ro
+      - mosquitto-data:/mosquitto/data
+
+  influxdb:
+    image: influxdb:2.7
+    container_name: toothless-influxdb
+    restart: unless-stopped
+    # No ports: block on purpose — InfluxDB is NOT reachable from the internet.
+    # In-stack services reach it as http://influxdb:8086; humans reach the UI via an
+    # SSH tunnel from a workstation (ssh -L 8086:localhost:8086 <box>).
+    volumes:
+      # Named volume on the host disk -> data survives container restart/recreate/upgrade.
+      - influxdb-data:/var/lib/influxdb2
+    environment:
+      # First-boot setup ONLY (runs when the data volume is empty; a no-op thereafter).
+      - DOCKER_INFLUXDB_INIT_MODE=setup
+      - DOCKER_INFLUXDB_INIT_ORG=toothless
+      - DOCKER_INFLUXDB_INIT_BUCKET=telemetry
+      - DOCKER_INFLUXDB_INIT_RETENTION=0s          # 0s = keep forever (revisit later)
+      # Secrets — substituted from the gitignored .env (see .env.example):
+      - DOCKER_INFLUXDB_INIT_USERNAME=${INFLUX_ADMIN_USER}
+      - DOCKER_INFLUXDB_INIT_PASSWORD=${INFLUX_ADMIN_PASSWORD}
+      - DOCKER_INFLUXDB_INIT_ADMIN_TOKEN=${INFLUX_ADMIN_TOKEN}
+
+  telegraf:
+    image: telegraf:1.31
+    container_name: toothless-telegraf
+    restart: unless-stopped
+    depends_on:
+      - mosquitto
+      - influxdb
+    volumes:
+      - ./telegraf.conf:/etc/telegraf/telegraf.conf:ro
+    environment:
+      # Injected into Telegraf's process env; telegraf.conf reads them as ${...} at runtime.
+      - MQTT_PASSWORD=${MQTT_TELEGRAF_PASSWORD}
+      - INFLUX_TOKEN=${INFLUX_ADMIN_TOKEN}
+
+volumes:
+  mosquitto-data:
+  influxdb-data:
