@@ -9,6 +9,16 @@ clear go-ahead ("write it", "do it", "go ahead", etc.). Read-only exploration (r
 searching, looking things up) is fine without asking; producing artifacts is not. When a plan
 is ready, summarize what you *would* create and wait.
 
+## Repo hygiene — what goes in committed files
+
+**Committed READMEs and docs are external-facing. Keep them to overview, architecture, and
+security *posture* only — never operational runbooks, host specifics (IPs, hostnames, ports,
+usernames), or step-by-step commands that could be abused if the repo leaks or ever goes
+public.** Operational runbooks and deployment specifics belong in **gitignored** local docs
+(`docs/HANDOFF.md`) or a password manager — not in version control. Secrets (credential stores,
+TLS keys, `config.h`) are always gitignored and generated on the host. When trimming a README,
+move the operational detail into the gitignored handoff rather than deleting it.
+
 ## What this is
 
 A telemetry/observability pipeline that pulls live data off a motorcycle, ships it

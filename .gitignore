@@ -228,3 +228,7 @@ infra/mosquitto/passwd
 
 # ESP32 firmware secrets (WiFi + broker credentials — never commit)
 firmware/toothless-edge/include/config.h
+
+# Internal handoff / operational runbook — local only, never commit
+# (contains host specifics that must not live in version control)
+docs/HANDOFF.md
