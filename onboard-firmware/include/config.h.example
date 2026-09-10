@@ -1,0 +1,31 @@
+// config.h.example — template. Copy to config.h and fill in your real values:
+//
+//     cp include/config.h.example include/config.h
+//
+// config.h is GITIGNORED (it holds your WiFi + broker credentials), so your
+// secrets never get committed. main.cpp includes config.h and reads these.
+
+#pragma once
+
+// --- WiFi (must be a 2.4 GHz network — the ESP32-S3 radio is 2.4 GHz only) ---
+// On an iPhone hotspot: enable "Maximize Compatibility" (forces 2.4 GHz), and
+// rename the phone to an ASCII-only name (Settings > General > About > Name) so
+// the SSID has no curly apostrophe (U+2019) — that mismatch silently fails auth.
+#define WIFI_SSID   "YOUR_HOTSPOT_SSID"
+#define WIFI_PASS   "YOUR_HOTSPOT_PASSWORD"
+
+// --- MQTT broker (self-hosted Mosquitto on the VPS, TLS) ---------------------
+#define MQTT_HOST    "toothless-telemetry.naveenapius.com"
+#define MQTT_PORT    8883                    // TLS listener (not the old plaintext 1883)
+#define MQTT_USER    "toothless"             // the mosquitto_passwd username
+#define MQTT_PASS    "YOUR_BROKER_PASSWORD"  // the toothless user's password
+#define MQTT_CLIENT  "toothless-esp32"       // this device's MQTT client id (must be unique)
+#define MQTT_TOPIC   "toothless/telemetry"   // one bundled JSON message per cycle lands here
+
+// --- Identity + timing ------------------------------------------------------
+#define DEVICE_SOURCE "esp32"                // goes in the "source" field of every message
+#define POLL_MS       1000UL                 // one full PID cycle roughly this often
+
+// --- BLE (the ELM327 dongle) ------------------------------------------------
+// These come from the dongle's captured GATT profile; the clones need no pairing.
+#define BLE_DEVICE_NAME "OBDII"
