@@ -32,9 +32,13 @@ services:
     image: influxdb:2.7
     container_name: toothless-influxdb
     restart: unless-stopped
-    # No ports: block on purpose — InfluxDB is NOT reachable from the internet.
-    # In-stack services reach it as http://influxdb:8086; humans reach the UI via an
-    # SSH tunnel from a workstation (ssh -L 8086:localhost:8086 <box>).
+    ports:
+      # Bound to the box's LOOPBACK only (127.0.0.1) — NOT 0.0.0.0. So InfluxDB is
+      # reachable from the box itself (and therefore an SSH tunnel:
+      # `ssh -L 8086:localhost:8086 <box>`), but NOT from the internet. The public
+      # surface stays exactly the broker's 8883. In-stack services still reach it
+      # by service name as http://influxdb:8086 over the docker network.
+      - "127.0.0.1:8086:8086"
     volumes:
       # Named volume on the host disk -> data survives container restart/recreate/upgrade.
       - influxdb-data:/var/lib/influxdb2
