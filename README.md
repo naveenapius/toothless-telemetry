@@ -86,9 +86,13 @@ Proven one layer at a time — *isolate one variable, prove each rung before the
 
 ## ⚡ What works today
 
-Live engine telemetry flows off the bike and across the internet, end-to-end, into a queryable database and onto live dashboards.
+Live engine telemetry flows off the bike and across the internet, end-to-end, into a queryable database and onto live dashboards:
 
-Each ~1-second cycle the edge node reads **eight live OBD-II PIDs** — RPM, speed, throttle, engine load, intake MAP, coolant temp, intake-air temp, module voltage — bundles them into a **single timestamped JSON message** (one point, many fields — the shape a time-series database actually wants), and publishes to the broker over TLS. A Telegraf bridge subscribes and writes each message into InfluxDB, preserving the reading's own timestamp so buffered data back-fills cleanly. **Grafana** then renders it — history graphs across the window, live "now" tiles, and threshold colours on coolant/voltage — all provisioned as code from the repo.
+- **Reads 8 live OBD-II PIDs each ~1s cycle** — RPM, speed, throttle, engine load, intake MAP, coolant temp, intake-air temp, module voltage.
+- **Bundles them into one timestamped JSON message** — one point, many fields, the shape a time-series database actually wants.
+- **Publishes over TLS** to the self-hosted, authenticated broker.
+- **Telegraf bridges MQTT → InfluxDB**, preserving each reading's own timestamp so buffered data back-fills cleanly.
+- **Grafana renders it** — history graphs across the window, live "now" tiles, and threshold colours on coolant/voltage — all provisioned as code from the repo.
 
 Verified full path, with simulated rides over the real transport (fake data before real data):
 
