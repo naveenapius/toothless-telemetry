@@ -22,7 +22,7 @@
       "targets": [
         {
           "refId": "A",
-          "query": "from(bucket: \"telemetry\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"telemetry\" and r._field == \"rpm\")\n  |> last()"
+          "query": "from(bucket: \"telemetry\")\n  |> range(start: -10s)\n  |> filter(fn: (r) => r._measurement == \"telemetry\" and r._field == \"rpm\")\n  |> last()"
         }
       ]
     },
@@ -37,7 +37,7 @@
       "targets": [
         {
           "refId": "A",
-          "query": "from(bucket: \"telemetry\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"telemetry\" and r._field == \"speed\")\n  |> last()"
+          "query": "from(bucket: \"telemetry\")\n  |> range(start: -10s)\n  |> filter(fn: (r) => r._measurement == \"telemetry\" and r._field == \"speed\")\n  |> last()"
         }
       ]
     },
@@ -59,7 +59,7 @@
       "targets": [
         {
           "refId": "A",
-          "query": "from(bucket: \"telemetry\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"telemetry\" and r._field == \"coolant_temp\")\n  |> last()"
+          "query": "from(bucket: \"telemetry\")\n  |> range(start: -10s)\n  |> filter(fn: (r) => r._measurement == \"telemetry\" and r._field == \"coolant_temp\")\n  |> last()"
         }
       ]
     },
@@ -82,7 +82,7 @@
       "targets": [
         {
           "refId": "A",
-          "query": "from(bucket: \"telemetry\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"telemetry\" and r._field == \"module_voltage\")\n  |> last()"
+          "query": "from(bucket: \"telemetry\")\n  |> range(start: -10s)\n  |> filter(fn: (r) => r._measurement == \"telemetry\" and r._field == \"module_voltage\")\n  |> last()"
         }
       ]
     },
