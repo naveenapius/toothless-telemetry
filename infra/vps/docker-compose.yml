@@ -1,0 +1,104 @@
+# Toothless Telemetry — the pipeline stack, containerized.
+# Deploy on the VPS: `docker compose up -d` from this directory.
+#
+# Services:
+#   mosquitto — public MQTT broker (TLS 8883, the only PUBLISHED port).
+#   influxdb  — time-series store (NOT published; reached in-network + via SSH tunnel).
+#   telegraf  — the MQTT->InfluxDB bridge (no ports; talks to both over the internal network).
+#   grafana   — dashboards over InfluxDB (loopback-only; reached via SSH tunnel for now).
+#
+# Secrets are generated ON THE BOX and never committed (see the repo .gitignore):
+#   passwd, certs/  — broker credentials + TLS material (mounted read-only below).
+#   .env            — InfluxDB admin creds/token + Telegraf's broker password (see .env.example).
+#                     Docker Compose auto-loads .env in this directory for ${VAR} substitution.
+
+services:
+  mosquitto:
+    image: eclipse-mosquitto:2.0.20
+    container_name: toothless-mosquitto
+    restart: unless-stopped
+    ports:
+      # ONLY 8883 (TLS) is exposed to the host/internet. The internal 1883 listener
+      # (see mosquitto.conf) is deliberately NOT published — it exists only on the
+      # docker network, for in-stack services like Telegraf.
+      - "8883:8883"
+    volumes:
+      - ./mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+      - ./passwd:/mosquitto/config/passwd:ro
+      - ./acl:/mosquitto/config/acl:ro
+      - ./certs:/mosquitto/config/certs:ro
+      - mosquitto-data:/mosquitto/data
+
+  influxdb:
+    image: influxdb:2.7
+    container_name: toothless-influxdb
+    restart: unless-stopped
+    ports:
+      # Bound to the box's LOOPBACK only (127.0.0.1) — NOT 0.0.0.0. So InfluxDB is
+      # reachable from the box itself (and therefore an SSH tunnel:
+      # `ssh -L 8086:localhost:8086 <box>`), but NOT from the internet. The public
+      # surface stays exactly the broker's 8883. In-stack services still reach it
+      # by service name as http://influxdb:8086 over the docker network.
+      - "127.0.0.1:8086:8086"
+    volumes:
+      # Named volume on the host disk -> data survives container restart/recreate/upgrade.
+      - influxdb-data:/var/lib/influxdb2
+    environment:
+      # First-boot setup ONLY (runs when the data volume is empty; a no-op thereafter).
+      - DOCKER_INFLUXDB_INIT_MODE=setup
+      - DOCKER_INFLUXDB_INIT_ORG=toothless
+      - DOCKER_INFLUXDB_INIT_BUCKET=telemetry
+      - DOCKER_INFLUXDB_INIT_RETENTION=0s          # 0s = keep forever (revisit later)
+      # Secrets — substituted from the gitignored .env (see .env.example):
+      - DOCKER_INFLUXDB_INIT_USERNAME=${INFLUX_ADMIN_USER}
+      - DOCKER_INFLUXDB_INIT_PASSWORD=${INFLUX_ADMIN_PASSWORD}
+      - DOCKER_INFLUXDB_INIT_ADMIN_TOKEN=${INFLUX_ADMIN_TOKEN}
+
+  telegraf:
+    image: telegraf:1.31
+    container_name: toothless-telegraf
+    restart: unless-stopped
+    depends_on:
+      - mosquitto
+      - influxdb
+    volumes:
+      - ./telegraf.conf:/etc/telegraf/telegraf.conf:ro
+    environment:
+      # Injected into Telegraf's process env; telegraf.conf reads them as ${...} at runtime.
+      - MQTT_PASSWORD=${MQTT_TELEGRAF_PASSWORD}
+      - INFLUX_TOKEN=${INFLUX_ADMIN_TOKEN}
+
+  grafana:
+    image: grafana/grafana:11.2.0
+    container_name: toothless-grafana
+    restart: unless-stopped
+    depends_on:
+      - influxdb
+    ports:
+      # Loopback-only (127.0.0.1), same posture as InfluxDB: reachable from the box
+      # itself and therefore via an SSH tunnel (`ssh -L 3000:localhost:3000 <box>`),
+      # but NOT from the internet. The public surface stays exactly the broker's 8883.
+      # (Public exposure — reverse proxy + TLS + iframe embed — is a later chapter.)
+      - "127.0.0.1:3000:3000"
+    volumes:
+      # Grafana's own state (users, prefs, dashboard edits): named volume on host disk.
+      - grafana-data:/var/lib/grafana
+      # Provisioning-as-code: datasource + dashboard provider + dashboard JSON, all
+      # committed to the repo and mounted read-only. Grafana loads these on startup, so
+      # the whole viz layer is reproducible from git (only the token is out-of-band).
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboard-defs:/var/lib/grafana/dashboards:ro
+    environment:
+      # First-boot admin login (change the password via .env; see .env.example).
+      - GF_SECURITY_ADMIN_USER=${GRAFANA_ADMIN_USER}
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD}
+      # No sign-up, no anonymous access while private. (Anonymous/public-dashboard +
+      # embedding get turned on deliberately in the public chapter, not here.)
+      - GF_USERS_ALLOW_SIGN_UP=false
+      # Read by the provisioned InfluxDB datasource (grafana/provisioning/datasources/).
+      - GRAFANA_INFLUX_TOKEN=${GRAFANA_INFLUX_TOKEN}
+
+volumes:
+  mosquitto-data:
+  influxdb-data:
+  grafana-data:

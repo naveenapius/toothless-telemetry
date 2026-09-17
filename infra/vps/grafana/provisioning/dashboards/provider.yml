@@ -1,0 +1,20 @@
+# Dashboard provider — tells Grafana to load dashboard JSON from a directory on disk.
+# This file (Grafana requires it to live under provisioning/dashboards/) is the LOADER;
+# the actual dashboard definitions live in ./grafana/dashboard-defs (mounted read-only to
+# the container path below — see docker-compose.yml), so every dashboard is committed and
+# reproducible.
+apiVersion: 1
+
+providers:
+  - name: toothless
+    orgId: 1
+    folder: ""
+    type: file
+    disableDeletion: false
+    # Re-scan for changes so edits to the committed JSON show up without a restart.
+    updateIntervalSeconds: 30
+    # Allow tweaking in the UI to iterate; export the JSON back into the repo to keep it.
+    allowUiUpdates: true
+    options:
+      path: /var/lib/grafana/dashboards
+      foldersFromFilesStructure: false
