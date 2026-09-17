@@ -9,6 +9,7 @@
 ![MQTT](https://img.shields.io/badge/Bus-MQTT%20%2F%20Mosquitto-660066?logo=eclipsemosquitto&logoColor=white)
 ![InfluxDB](https://img.shields.io/badge/Store-InfluxDB-22ADF6?logo=influxdb&logoColor=white)
 ![Telegraf](https://img.shields.io/badge/Bridge-Telegraf-22ADF6?logo=influxdb&logoColor=white)
+![Grafana](https://img.shields.io/badge/Dashboards-Grafana-F46800?logo=grafana&logoColor=white)
 ![Docker](https://img.shields.io/badge/Deploy-Docker%20Compose-2496ED?logo=docker&logoColor=white)
 ![TLS](https://img.shields.io/badge/Transport-TLS%201.2%20%2F%20Let's%20Encrypt-003A70?logo=letsencrypt&logoColor=white)
 ![Python](https://img.shields.io/badge/Tooling-Python%20%2F%20uv-3776AB?logo=python&logoColor=white)
@@ -17,7 +18,7 @@
 
 ---
 
-Toothless Telemetry treats a **2024 Yamaha MT-15** as a live data source and builds a full observability pipeline around it: an ESP32-S3 edge node reads the bike's engine PIDs, bundles each cycle into one timestamped message, and ships it over an authenticated TLS broker into a time-series database for visualization and alerting.
+**Toothless** is my **2024 Yamaha MT-15** — and this project treats it as a live data source, building a full observability pipeline around it: an ESP32-S3 edge node reads the bike's engine PIDs, bundles each cycle into one timestamped message, and ships it over an authenticated TLS broker into a time-series database for visualization and alerting.
 
 It's the same architecture as production telemetry work — **edge collection → a message bus → a time-series backend**, with store-and-forward durability, TLS, secrets hygiene, and config-as-code throughout — with a motorcycle on the sensor end instead of a fleet of servers.
 
@@ -46,7 +47,7 @@ flowchart TB
         MQTT["Mosquitto broker<br/>TLS 8883 · auth · ACL"]
         TG["Telegraf<br/>MQTT → InfluxDB bridge"]
         INFLUX["InfluxDB<br/>time-series store"]
-        VIZ["Visualization + alerting<br/>(next up)"]
+        VIZ["Grafana<br/>dashboards + alerting (as code)"]
         MQTT --> TG --> INFLUX --> VIZ
     end
 
@@ -55,11 +56,11 @@ flowchart TB
     classDef bike fill:#fde2e2,stroke:#e7352c,color:#111;
     classDef edge fill:#e7f0fd,stroke:#2f6fdb,color:#111;
     classDef cloud fill:#e6f7ec,stroke:#1f9d55,color:#111;
-    classDef next fill:#fff4d6,stroke:#d9a400,color:#111,stroke-dasharray:5 5;
+    classDef viz fill:#ffe9d6,stroke:#f46800,color:#111;
     class ECU,DONGLE bike;
     class ESP,BUF edge;
     class MQTT,TG,INFLUX cloud;
-    class VIZ next;
+    class VIZ viz;
 ```
 
 Every client dials **outbound** to a single publicly-addressable broker, so the bike (on a phone hotspot) and the pipeline (on a VPS) reach each other across different networks with **no inbound routing or VPN** — MQTT's design does the NAT traversal for free.
@@ -75,20 +76,23 @@ Proven one layer at a time — *isolate one variable, prove each rung before the
 | Edge node: BLE acquisition → WiFi → MQTT | ✅ Done |
 | Real bike data over authenticated **TLS** to a public broker | ✅ Done |
 | **Storage:** Mosquitto → Telegraf → InfluxDB (containerized, verified end-to-end) | ✅ Done |
-| **Visualization + alerting** | ⬜ Next |
+| **Visualization + alerting:** Grafana, dashboards-as-code | ✅ Done |
+| Make the dashboard **publicly viewable** (reverse proxy + TLS, scoped embed) | ⬜ Next |
 | Gear-from-ratio analyzer · durable offline buffer · permanent bike power | ⬜ Planned |
+
+> The core pipeline ladder — `blink → serial → MQTT-with-fake-data → real-data → storage → viz` — is **complete**. Every rung is built and proven with simulated rides over the real path.
 
 ---
 
 ## ⚡ What works today
 
-Live engine telemetry flows off the bike and across the internet, end-to-end, into a queryable database.
+Live engine telemetry flows off the bike and across the internet, end-to-end, into a queryable database and onto live dashboards.
 
-Each ~1-second cycle the edge node reads **eight live OBD-II PIDs** — RPM, speed, throttle, engine load, intake MAP, coolant temp, intake-air temp, module voltage — bundles them into a **single timestamped JSON message** (one point, many fields — the shape a time-series database actually wants), and publishes to the broker over TLS. A Telegraf bridge subscribes and writes each message into InfluxDB, preserving the reading's own timestamp so buffered data back-fills cleanly.
+Each ~1-second cycle the edge node reads **eight live OBD-II PIDs** — RPM, speed, throttle, engine load, intake MAP, coolant temp, intake-air temp, module voltage — bundles them into a **single timestamped JSON message** (one point, many fields — the shape a time-series database actually wants), and publishes to the broker over TLS. A Telegraf bridge subscribes and writes each message into InfluxDB, preserving the reading's own timestamp so buffered data back-fills cleanly. **Grafana** then renders it — history graphs across the window, live "now" tiles, and threshold colours on coolant/voltage — all provisioned as code from the repo.
 
-Verified full path, with the bike running:
+Verified full path, with simulated rides over the real transport (fake data before real data):
 
-> **bike → BLE → ESP32 → WiFi → TLS MQTT → Mosquitto → Telegraf → InfluxDB**
+> **bike → BLE → ESP32 → WiFi → TLS MQTT → Mosquitto → Telegraf → InfluxDB → Grafana**
 
 ---
 
@@ -101,8 +105,9 @@ The server side runs as **one Docker Compose stack** on a self-managed VPS — t
 | **Mosquitto** | The public rendezvous broker (TLS-only), where the bike and the pipeline meet |
 | **Telegraf** | The zero-code bridge — subscribes to the telemetry topic, writes each message into InfluxDB |
 | **InfluxDB** | The time-series store where readings land and are queried |
+| **Grafana** | Dashboards + alerting, provisioned as code; queries the store read-only (least-privilege token) |
 
-Only the broker's TLS port is exposed to the internet; the database and the internal bridge live on a private network, and the database UI is reached over an SSH tunnel — never a public port.
+Only the broker's TLS port is exposed to the internet; the database, bridge, and dashboards live on a private network, and their UIs are reached over an SSH tunnel — never a public port. (Making the dashboard publicly viewable, behind its own reverse proxy and TLS, is the next rung.)
 
 ---
 
@@ -126,7 +131,7 @@ Only the broker's TLS port is exposed to the internet; the database and the inte
 - **Firmware:** C++/Arduino · ESP32-S3 · PlatformIO · NimBLE · PubSubClient
 - **Transport:** MQTT over TLS 1.2 (Mosquitto, Let's Encrypt)
 - **Pipeline:** Telegraf → InfluxDB (OSS v2), containerized with Docker Compose
-- **Visualization:** Grafana (leading candidate — deliberate comparison still pending)
+- **Visualization:** Grafana, self-hosted, dashboards-as-code (chosen over the DB's own UI and hosted SaaS after a deliberate comparison; OpenTelemetry-to-SaaS noted as a later learning chapter)
 - **Tooling / analysis:** Python (Bleak for BLE, pipeline glue, analysis) · `uv`
 - **Hardware:** ESP32-S3 (N16R8) · ELM327 BLE OBD-II dongle · MODAXE BS6 adapter
 
@@ -134,10 +139,11 @@ Only the broker's TLS port is exposed to the internet; the database and the inte
 
 ## 🛣️ Roadmap
 
-- **Visualization & alerting** — dashboards over the live data; shift-point and throttle-aggression views. *(next)*
-- **Gear-from-ratio analyzer** — derive gear and shift points from the RPM/speed relationship (no extra hardware).
+- **Publicly-viewable dashboard** — a reverse proxy with its own TLS, a scoped public/embedded dashboard, and the hardening that comes with opening a new door. *(next)*
+- **Gear-from-ratio analyzer** — derive gear and shift points from the RPM/speed relationship (no extra hardware); then shift-point and throttle-aggression views on top.
 - **Durable offline buffer** — a flash/SD tier behind the existing append/drain interface, for whole-ride and power-loss capture.
 - **Automated off-box backups** of the time-series data.
+- **OpenTelemetry export** — ship the same rides to a hosted backend (free tier) *alongside* the self-hosted stack, to learn the vendor-neutral export path without giving up data ownership.
 - **Permanent bike power** — a switched/buck tap to retire the development power bank.
 
 ---
