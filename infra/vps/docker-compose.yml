@@ -5,6 +5,7 @@
 #   mosquitto — public MQTT broker (TLS 8883, the only PUBLISHED port).
 #   influxdb  — time-series store (NOT published; reached in-network + via SSH tunnel).
 #   telegraf  — the MQTT->InfluxDB bridge (no ports; talks to both over the internal network).
+#   grafana   — dashboards over InfluxDB (loopback-only; reached via SSH tunnel for now).
 #
 # Secrets are generated ON THE BOX and never committed (see the repo .gitignore):
 #   passwd, certs/  — broker credentials + TLS material (mounted read-only below).
@@ -67,6 +68,37 @@ services:
       - MQTT_PASSWORD=${MQTT_TELEGRAF_PASSWORD}
       - INFLUX_TOKEN=${INFLUX_ADMIN_TOKEN}
 
+  grafana:
+    image: grafana/grafana:11.2.0
+    container_name: toothless-grafana
+    restart: unless-stopped
+    depends_on:
+      - influxdb
+    ports:
+      # Loopback-only (127.0.0.1), same posture as InfluxDB: reachable from the box
+      # itself and therefore via an SSH tunnel (`ssh -L 3000:localhost:3000 <box>`),
+      # but NOT from the internet. The public surface stays exactly the broker's 8883.
+      # (Public exposure — reverse proxy + TLS + iframe embed — is a later chapter.)
+      - "127.0.0.1:3000:3000"
+    volumes:
+      # Grafana's own state (users, prefs, dashboard edits): named volume on host disk.
+      - grafana-data:/var/lib/grafana
+      # Provisioning-as-code: datasource + dashboard provider + dashboard JSON, all
+      # committed to the repo and mounted read-only. Grafana loads these on startup, so
+      # the whole viz layer is reproducible from git (only the token is out-of-band).
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboard-defs:/var/lib/grafana/dashboards:ro
+    environment:
+      # First-boot admin login (change the password via .env; see .env.example).
+      - GF_SECURITY_ADMIN_USER=${GRAFANA_ADMIN_USER}
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD}
+      # No sign-up, no anonymous access while private. (Anonymous/public-dashboard +
+      # embedding get turned on deliberately in the public chapter, not here.)
+      - GF_USERS_ALLOW_SIGN_UP=false
+      # Read by the provisioned InfluxDB datasource (grafana/provisioning/datasources/).
+      - GRAFANA_INFLUX_TOKEN=${GRAFANA_INFLUX_TOKEN}
+
 volumes:
   mosquitto-data:
   influxdb-data:
+  grafana-data:
