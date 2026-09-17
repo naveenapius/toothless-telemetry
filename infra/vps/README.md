@@ -1,13 +1,16 @@
 # Telemetry pipeline stack (broker + store + bridge, containerized)
 
 The server-side pipeline for Toothless Telemetry, run as one Docker Compose stack on a
-self-managed Linux VPS. Three services:
+self-managed Linux VPS. Four services:
 
 - **Mosquitto** — the public, internet-reachable MQTT broker. It's the **rendezvous point**: the
   ESP32 on the motorcycle (publishing from a phone hotspot) and the pipeline both connect
   *outbound* to it, so telemetry flows across different networks without any inbound routing or VPN.
 - **InfluxDB** — the time-series store where readings land and are queried.
 - **Telegraf** — the bridge that subscribes to the broker and writes each message into InfluxDB.
+- **Grafana** — the dashboard layer that queries InfluxDB and visualizes the telemetry. It stores
+  no data of its own; it reads from InfluxDB on demand. Its datasource and dashboards are
+  provisioned as code (committed here), so the whole viz layer is reproducible.
 
 This directory is **config-as-code** — the whole stack is reproducible from these files. Secrets
 (credential stores, TLS private key, InfluxDB admin token) are generated on the host and never committed.
@@ -15,7 +18,7 @@ This directory is **config-as-code** — the whole stack is reproducible from th
 ## Architecture
 
 ```
-ESP32 (bike hotspot) ─► Mosquitto (TLS 8883, public) ─► Telegraf ─► InfluxDB ─► dashboards (TBD)
+ESP32 (bike hotspot) ─► Mosquitto (TLS 8883, public) ─► Telegraf ─► InfluxDB ◄─ Grafana (dashboards)
                                                      └── all in-stack hops stay on the docker network ──┘
 ```
 
@@ -33,9 +36,11 @@ ESP32 (bike hotspot) ─► Mosquitto (TLS 8883, public) ─► Telegraf ─► 
 - **Authentication + ACL** — anonymous access disabled; each client authenticates with a
   username/password, and an ACL confines it to the project's own topic tree (least privilege).
   The bridge (Telegraf) uses a separate read-only user — it can ingest but never publish.
-- **Store + bridge are not exposed** — InfluxDB and Telegraf publish no ports; InfluxDB is
-  reachable only in-network and, for the UI, via an SSH tunnel. The stack's public surface is
-  unchanged: the broker's TLS port only.
+- **Store, bridge, and dashboards are not publicly exposed** — InfluxDB and Telegraf publish no
+  ports; Grafana is published to the host's loopback only. All three UIs are reached from a
+  workstation over an SSH tunnel, not the open internet. The stack's public surface is unchanged:
+  the broker's TLS port only. Grafana talks to InfluxDB over the internal network with a
+  read-only token (least privilege) — it can query but never write.
 - **Automatic certificate renewal** — certbot renews on a timer and reloads the broker via a
   deploy hook, so TLS stays valid unattended.
 - **Host hardening** — default-deny firewall (only SSH + the ACME challenge port + 8883 open),
@@ -45,12 +50,14 @@ ESP32 (bike hotspot) ─► Mosquitto (TLS 8883, public) ─► Telegraf ─► 
 
 | File | Purpose |
 |---|---|
-| `docker-compose.yml` | The stack: mosquitto + influxdb + telegraf — images, ports, volumes, mounts |
+| `docker-compose.yml` | The stack: mosquitto + influxdb + telegraf + grafana — images, ports, volumes, mounts |
 | `mosquitto.conf` | Broker configuration: TLS + internal listeners, auth, ACL, persistence |
 | `acl` | Access-control list scoping each user to its topic tree |
 | `telegraf.conf` | The MQTT→InfluxDB bridge: which topic to read, how to parse it, where to write |
+| `grafana/provisioning/` | Datasource + dashboard-provider config Grafana loads on startup (as code) |
+| `grafana/dashboard-defs/` | Dashboard definitions (JSON), committed and version-controlled |
 | `deploy-certs.sh` | Makes the Let's Encrypt cert readable by the container; also the renewal hook |
-| `.env.example` | Template for the gitignored `.env` (InfluxDB admin creds/token, bridge password) |
+| `.env.example` | Template for the gitignored `.env` (InfluxDB + Grafana creds/tokens, bridge password) |
 | `README.md` | This overview |
 
 Secrets (`passwd`, `certs/`, `.env`) are generated on the host and gitignored — they are never

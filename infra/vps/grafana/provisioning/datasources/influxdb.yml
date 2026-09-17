@@ -1,0 +1,23 @@
+# InfluxDB datasource for Grafana — provisioned as code (loaded on startup).
+#
+# Grafana reaches InfluxDB over the internal docker network (http://influxdb:8086),
+# so no published port is needed for this hop. The token is injected from the process
+# environment ($GRAFANA_INFLUX_TOKEN, set from the gitignored .env) — never hard-coded.
+#
+# Query language is Flux (InfluxDB 2.x native). Panels reference this datasource by its
+# fixed uid `influxdb-telemetry`, so the committed dashboard JSON stays portable.
+apiVersion: 1
+
+datasources:
+  - name: InfluxDB
+    uid: influxdb-telemetry
+    type: influxdb
+    access: proxy
+    url: http://influxdb:8086
+    isDefault: true
+    jsonData:
+      version: Flux
+      organization: toothless
+      defaultBucket: telemetry
+    secureJsonData:
+      token: $GRAFANA_INFLUX_TOKEN
