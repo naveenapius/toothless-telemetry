@@ -2,7 +2,7 @@
 
 # 🏍️ Toothless Telemetry
 
-**A real-time telemetry & observability pipeline that pulls live data off a motorcycle, ships it over an authenticated TLS broker, and lands it in a time-series database — built end-to-end, in public.**
+**A real-time telemetry & observability pipeline that pulls live data off a motorcycle, ships it over an authenticated TLS broker, and lands it in a time-series database.
 
 ![Firmware](https://img.shields.io/badge/Firmware-C%2B%2B%20%2F%20Arduino-00599C?logo=cplusplus&logoColor=white)
 ![ESP32-S3](https://img.shields.io/badge/Edge-ESP32--S3-E7352C?logo=espressif&logoColor=white)
