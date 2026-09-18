@@ -4,19 +4,44 @@
   "tags": ["toothless", "telemetry"],
   "timezone": "browser",
   "schemaVersion": 39,
-  "version": 2,
+  "version": 3,
   "editable": true,
-  "refresh": "5s",
+  "refresh": "1s",
   "time": { "from": "now-15m", "to": "now" },
   "templating": { "list": [] },
   "annotations": { "list": [] },
   "panels": [
     {
+      "id": 12,
+      "type": "stat",
+      "title": "Gear (now)",
+      "description": "DERIVED from the rpm/speed ratio (not sent by the bike). N = stopped, crawling, or clutch-in (no reliable ratio). Ladder documented in infra/vps/grafana/README.md.",
+      "datasource": { "type": "influxdb", "uid": "influxdb-telemetry" },
+      "gridPos": { "h": 4, "w": 4, "x": 0, "y": 0 },
+      "fieldConfig": {
+        "defaults": {
+          "min": 0,
+          "max": 6,
+          "color": { "mode": "thresholds" },
+          "thresholds": { "mode": "absolute", "steps": [ { "color": "#868e96", "value": null }, { "color": "#e6392f", "value": 1 }, { "color": "#f08c00", "value": 2 }, { "color": "#f5c400", "value": 3 }, { "color": "#37b24d", "value": 4 }, { "color": "#1c7ed6", "value": 5 }, { "color": "#7048e8", "value": 6 } ] },
+          "mappings": [ { "type": "value", "options": { "0": { "text": "N", "index": 0 }, "1": { "text": "1", "index": 1 }, "2": { "text": "2", "index": 2 }, "3": { "text": "3", "index": 3 }, "4": { "text": "4", "index": 4 }, "5": { "text": "5", "index": 5 }, "6": { "text": "6", "index": 6 } } } ]
+        },
+        "overrides": []
+      },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background", "graphMode": "none", "textMode": "value" },
+      "targets": [
+        {
+          "refId": "A",
+          "query": "// Gear is DERIVED, not a bike signal: gear = rpm/speed ratio -> nearest gear centroid.\n// Thresholds are the geometric means of adjacent centroids (band boundaries).\n// N (0) = stopped / crawling / clutch-in. See infra/vps/grafana/README.md.\nfrom(bucket: \"telemetry\")\n  |> range(start: -10s)\n  |> filter(fn: (r) => r._measurement == \"telemetry\" and (r._field == \"rpm\" or r._field == \"speed\"))\n  |> aggregateWindow(every: 1s, fn: last, createEmpty: false)\n  |> pivot(rowKey: [\"_time\"], columnKey: [\"_field\"], valueColumn: \"_value\")\n  |> map(fn: (r) => ({ _time: r._time, _value:\n      if r.speed < 8.0 or r.rpm < 800.0 then 0.0\n      else if r.rpm / r.speed >= 225.6 then 1.0\n      else if r.rpm / r.speed >= 156.0 then 2.0\n      else if r.rpm / r.speed >= 121.5 then 3.0\n      else if r.rpm / r.speed >= 101.6 then 4.0\n      else if r.rpm / r.speed >= 87.3 then 5.0\n      else 6.0 }))\n  |> keep(columns: [\"_time\", \"_value\"])\n  |> last()"
+        }
+      ]
+    },
+    {
       "id": 1,
       "type": "stat",
       "title": "RPM (now)",
       "datasource": { "type": "influxdb", "uid": "influxdb-telemetry" },
-      "gridPos": { "h": 4, "w": 6, "x": 0, "y": 0 },
+      "gridPos": { "h": 4, "w": 5, "x": 4, "y": 0 },
       "fieldConfig": { "defaults": { "unit": "rotrpm", "color": { "mode": "thresholds" } }, "overrides": [] },
       "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "value", "graphMode": "area" },
       "targets": [
@@ -31,7 +56,7 @@
       "type": "stat",
       "title": "Speed (now)",
       "datasource": { "type": "influxdb", "uid": "influxdb-telemetry" },
-      "gridPos": { "h": 4, "w": 6, "x": 6, "y": 0 },
+      "gridPos": { "h": 4, "w": 5, "x": 9, "y": 0 },
       "fieldConfig": { "defaults": { "unit": "velocitykmh", "color": { "mode": "thresholds" } }, "overrides": [] },
       "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "value", "graphMode": "area" },
       "targets": [
@@ -46,7 +71,7 @@
       "type": "stat",
       "title": "Coolant (now)",
       "datasource": { "type": "influxdb", "uid": "influxdb-telemetry" },
-      "gridPos": { "h": 4, "w": 6, "x": 12, "y": 0 },
+      "gridPos": { "h": 4, "w": 5, "x": 14, "y": 0 },
       "fieldConfig": {
         "defaults": {
           "unit": "celsius",
@@ -68,7 +93,7 @@
       "type": "stat",
       "title": "Battery (now)",
       "datasource": { "type": "influxdb", "uid": "influxdb-telemetry" },
-      "gridPos": { "h": 4, "w": 6, "x": 18, "y": 0 },
+      "gridPos": { "h": 4, "w": 5, "x": 19, "y": 0 },
       "fieldConfig": {
         "defaults": {
           "unit": "volt",
@@ -117,11 +142,63 @@
       ]
     },
     {
+      "id": 13,
+      "type": "state-timeline",
+      "title": "Gear over time",
+      "description": "Gear derived per sample from the rpm/speed ratio. Colour = gear; grey N = no reliable ratio (stopped / crawling / clutch-in). See infra/vps/grafana/README.md.",
+      "datasource": { "type": "influxdb", "uid": "influxdb-telemetry" },
+      "gridPos": { "h": 5, "w": 24, "x": 0, "y": 12 },
+      "fieldConfig": {
+        "defaults": {
+          "min": 0,
+          "max": 6,
+          "custom": { "fillOpacity": 90, "lineWidth": 0 },
+          "color": { "mode": "thresholds" },
+          "thresholds": { "mode": "absolute", "steps": [ { "color": "#868e96", "value": null }, { "color": "#e6392f", "value": 1 }, { "color": "#f08c00", "value": 2 }, { "color": "#f5c400", "value": 3 }, { "color": "#37b24d", "value": 4 }, { "color": "#1c7ed6", "value": 5 }, { "color": "#7048e8", "value": 6 } ] },
+          "mappings": [ { "type": "value", "options": { "0": { "text": "N", "index": 0 }, "1": { "text": "1", "index": 1 }, "2": { "text": "2", "index": 2 }, "3": { "text": "3", "index": 3 }, "4": { "text": "4", "index": 4 }, "5": { "text": "5", "index": 5 }, "6": { "text": "6", "index": 6 } } } ]
+        },
+        "overrides": []
+      },
+      "options": { "mergeValues": true, "showValue": "never", "alignValue": "center", "rowHeight": 0.9, "legend": { "showLegend": false } },
+      "targets": [
+        {
+          "refId": "A",
+          "query": "// Gear is DERIVED, not a bike signal: gear = rpm/speed ratio -> nearest gear centroid.\n// Thresholds are the geometric means of adjacent centroids (band boundaries).\n// N (0) = stopped / crawling / clutch-in. See infra/vps/grafana/README.md.\nfrom(bucket: \"telemetry\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"telemetry\" and (r._field == \"rpm\" or r._field == \"speed\"))\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)\n  |> pivot(rowKey: [\"_time\"], columnKey: [\"_field\"], valueColumn: \"_value\")\n  |> map(fn: (r) => ({ _time: r._time, _value:\n      if r.speed < 8.0 or r.rpm < 800.0 then 0.0\n      else if r.rpm / r.speed >= 225.6 then 1.0\n      else if r.rpm / r.speed >= 156.0 then 2.0\n      else if r.rpm / r.speed >= 121.5 then 3.0\n      else if r.rpm / r.speed >= 101.6 then 4.0\n      else if r.rpm / r.speed >= 87.3 then 5.0\n      else 6.0 }))\n  |> keep(columns: [\"_time\", \"_value\"])"
+        }
+      ]
+    },
+    {
+      "id": 14,
+      "type": "timeseries",
+      "title": "Gear ratio (rpm / speed) — dashed lines = gear centroids",
+      "description": "The raw signal gear is derived from. Each dashed line is a gear centroid; the band a point sits in is its gear. Vertical smears between bands are shift transients. See infra/vps/grafana/README.md.",
+      "datasource": { "type": "influxdb", "uid": "influxdb-telemetry" },
+      "gridPos": { "h": 9, "w": 24, "x": 0, "y": 17 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "decimals": 0,
+          "max": 350,
+          "custom": { "drawStyle": "points", "pointSize": 4, "showPoints": "always", "lineWidth": 0, "fillOpacity": 0, "thresholdsStyle": { "mode": "line" } },
+          "color": { "mode": "fixed", "fixedColor": "#adb5bd" },
+          "thresholds": { "mode": "absolute", "steps": [ { "color": "#868e96", "value": null }, { "color": "#7048e8", "value": 82 }, { "color": "#1c7ed6", "value": 93 }, { "color": "#37b24d", "value": 111 }, { "color": "#f5c400", "value": 133 }, { "color": "#f08c00", "value": 183 }, { "color": "#e6392f", "value": 278 } ] }
+        },
+        "overrides": []
+      },
+      "options": { "legend": { "showLegend": false }, "tooltip": { "mode": "single" } },
+      "targets": [
+        {
+          "refId": "A",
+          "query": "// Raw rpm/speed ratio = the signal gear is derived from. Only computed while moving\n// (speed >= 8) and pulling (rpm >= 800); below that the ratio is meaningless.\n// Threshold lines mark the six gear centroids. See infra/vps/grafana/README.md.\nfrom(bucket: \"telemetry\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"telemetry\" and (r._field == \"rpm\" or r._field == \"speed\"))\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)\n  |> pivot(rowKey: [\"_time\"], columnKey: [\"_field\"], valueColumn: \"_value\")\n  |> filter(fn: (r) => r.speed >= 8.0 and r.rpm >= 800.0)\n  |> map(fn: (r) => ({ _time: r._time, _field: \"ratio\", _value: r.rpm / r.speed }))"
+        }
+      ]
+    },
+    {
       "id": 7,
       "type": "timeseries",
       "title": "Throttle position",
       "datasource": { "type": "influxdb", "uid": "influxdb-telemetry" },
-      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 12 },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 26 },
       "fieldConfig": { "defaults": { "unit": "percent", "custom": { "drawStyle": "line", "lineInterpolation": "smooth", "fillOpacity": 10, "showPoints": "never" } }, "overrides": [] },
       "options": { "legend": { "showLegend": false }, "tooltip": { "mode": "single" } },
       "targets": [
@@ -136,7 +213,7 @@
       "type": "timeseries",
       "title": "Coolant temperature",
       "datasource": { "type": "influxdb", "uid": "influxdb-telemetry" },
-      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 12 },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 26 },
       "fieldConfig": { "defaults": { "unit": "celsius", "custom": { "drawStyle": "line", "lineInterpolation": "smooth", "fillOpacity": 10, "showPoints": "never" } }, "overrides": [] },
       "options": { "legend": { "showLegend": false }, "tooltip": { "mode": "single" } },
       "targets": [
@@ -151,7 +228,7 @@
       "type": "timeseries",
       "title": "Battery voltage",
       "datasource": { "type": "influxdb", "uid": "influxdb-telemetry" },
-      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 20 },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 34 },
       "fieldConfig": { "defaults": { "unit": "volt", "decimals": 2, "custom": { "drawStyle": "line", "lineInterpolation": "smooth", "fillOpacity": 10, "showPoints": "never" } }, "overrides": [] },
       "options": { "legend": { "showLegend": false }, "tooltip": { "mode": "single" } },
       "targets": [
@@ -166,98 +243,13 @@
       "type": "timeseries",
       "title": "Engine load",
       "datasource": { "type": "influxdb", "uid": "influxdb-telemetry" },
-      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 20 },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 34 },
       "fieldConfig": { "defaults": { "unit": "percent", "custom": { "drawStyle": "line", "lineInterpolation": "smooth", "fillOpacity": 10, "showPoints": "never" } }, "overrides": [] },
       "options": { "legend": { "showLegend": false }, "tooltip": { "mode": "single" } },
       "targets": [
         {
           "refId": "A",
           "query": "from(bucket: \"telemetry\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"telemetry\" and r._field == \"engine_load\")\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)"
-        }
-      ]
-    },
-    {
-      "id": 11,
-      "type": "row",
-      "title": "Derived — Gear (computed in Flux from rpm/speed; NOT sent by the bike — see infra/vps/grafana/README.md)",
-      "collapsed": false,
-      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 28 },
-      "panels": []
-    },
-    {
-      "id": 12,
-      "type": "stat",
-      "title": "Gear (now)",
-      "description": "Derived from the rpm/speed ratio. N = stopped, crawling, or clutch-in (no reliable ratio). See infra/vps/grafana/README.md for the ratio ladder.",
-      "datasource": { "type": "influxdb", "uid": "influxdb-telemetry" },
-      "gridPos": { "h": 6, "w": 6, "x": 0, "y": 29 },
-      "fieldConfig": {
-        "defaults": {
-          "min": 0,
-          "max": 6,
-          "color": { "mode": "thresholds" },
-          "thresholds": { "mode": "absolute", "steps": [ { "color": "#868e96", "value": null }, { "color": "#e6392f", "value": 1 }, { "color": "#f08c00", "value": 2 }, { "color": "#f5c400", "value": 3 }, { "color": "#37b24d", "value": 4 }, { "color": "#1c7ed6", "value": 5 }, { "color": "#7048e8", "value": 6 } ] },
-          "mappings": [ { "type": "value", "options": { "0": { "text": "N", "index": 0 }, "1": { "text": "1", "index": 1 }, "2": { "text": "2", "index": 2 }, "3": { "text": "3", "index": 3 }, "4": { "text": "4", "index": 4 }, "5": { "text": "5", "index": 5 }, "6": { "text": "6", "index": 6 } } } ]
-        },
-        "overrides": []
-      },
-      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background", "graphMode": "none", "textMode": "value" },
-      "targets": [
-        {
-          "refId": "A",
-          "query": "// Gear is DERIVED, not a bike signal: gear = rpm/speed ratio -> nearest gear centroid.\n// Thresholds below are the geometric means of adjacent centroids (the band boundaries).\n// N (0) = stopped / crawling / clutch-in. See infra/vps/grafana/README.md.\nfrom(bucket: \"telemetry\")\n  |> range(start: -1m)\n  |> filter(fn: (r) => r._measurement == \"telemetry\" and (r._field == \"rpm\" or r._field == \"speed\"))\n  |> aggregateWindow(every: 5s, fn: last, createEmpty: false)\n  |> pivot(rowKey: [\"_time\"], columnKey: [\"_field\"], valueColumn: \"_value\")\n  |> map(fn: (r) => ({ _time: r._time, _field: \"gear\", _value:\n      if r.speed < 8.0 or r.rpm < 800.0 then 0.0\n      else if r.rpm / r.speed >= 225.6 then 1.0\n      else if r.rpm / r.speed >= 156.0 then 2.0\n      else if r.rpm / r.speed >= 121.5 then 3.0\n      else if r.rpm / r.speed >= 101.6 then 4.0\n      else if r.rpm / r.speed >= 87.3 then 5.0\n      else 6.0 }))\n  |> last(column: \"_value\")"
-        }
-      ]
-    },
-    {
-      "id": 13,
-      "type": "state-timeline",
-      "title": "Gear over time",
-      "description": "Gear derived per sample from the rpm/speed ratio. Colour = gear; grey N = no reliable ratio. See infra/vps/grafana/README.md.",
-      "datasource": { "type": "influxdb", "uid": "influxdb-telemetry" },
-      "gridPos": { "h": 6, "w": 18, "x": 6, "y": 29 },
-      "fieldConfig": {
-        "defaults": {
-          "min": 0,
-          "max": 6,
-          "custom": { "fillOpacity": 85, "lineWidth": 0 },
-          "color": { "mode": "thresholds" },
-          "thresholds": { "mode": "absolute", "steps": [ { "color": "#868e96", "value": null }, { "color": "#e6392f", "value": 1 }, { "color": "#f08c00", "value": 2 }, { "color": "#f5c400", "value": 3 }, { "color": "#37b24d", "value": 4 }, { "color": "#1c7ed6", "value": 5 }, { "color": "#7048e8", "value": 6 } ] },
-          "mappings": [ { "type": "value", "options": { "0": { "text": "N", "index": 0 }, "1": { "text": "1", "index": 1 }, "2": { "text": "2", "index": 2 }, "3": { "text": "3", "index": 3 }, "4": { "text": "4", "index": 4 }, "5": { "text": "5", "index": 5 }, "6": { "text": "6", "index": 6 } } } ]
-        },
-        "overrides": []
-      },
-      "options": { "mergeValues": true, "showValue": "auto", "alignValue": "center", "rowHeight": 0.9, "legend": { "showLegend": false } },
-      "targets": [
-        {
-          "refId": "A",
-          "query": "// Gear is DERIVED, not a bike signal: gear = rpm/speed ratio -> nearest gear centroid.\n// Thresholds below are the geometric means of adjacent centroids (the band boundaries).\n// N (0) = stopped / crawling / clutch-in. See infra/vps/grafana/README.md.\nfrom(bucket: \"telemetry\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"telemetry\" and (r._field == \"rpm\" or r._field == \"speed\"))\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)\n  |> pivot(rowKey: [\"_time\"], columnKey: [\"_field\"], valueColumn: \"_value\")\n  |> map(fn: (r) => ({ _time: r._time, _field: \"gear\", _value:\n      if r.speed < 8.0 or r.rpm < 800.0 then 0.0\n      else if r.rpm / r.speed >= 225.6 then 1.0\n      else if r.rpm / r.speed >= 156.0 then 2.0\n      else if r.rpm / r.speed >= 121.5 then 3.0\n      else if r.rpm / r.speed >= 101.6 then 4.0\n      else if r.rpm / r.speed >= 87.3 then 5.0\n      else 6.0 }))"
-        }
-      ]
-    },
-    {
-      "id": 14,
-      "type": "timeseries",
-      "title": "Gear ratio (rpm / speed) — dashed lines = gear centroids",
-      "description": "The raw signal gear is derived from. Each dashed line is a gear centroid; the horizontal band a point sits in is its gear. Vertical smears between bands are shift transients. See infra/vps/grafana/README.md.",
-      "datasource": { "type": "influxdb", "uid": "influxdb-telemetry" },
-      "gridPos": { "h": 9, "w": 24, "x": 0, "y": 35 },
-      "fieldConfig": {
-        "defaults": {
-          "unit": "none",
-          "decimals": 0,
-          "max": 350,
-          "custom": { "drawStyle": "points", "pointSize": 4, "showPoints": "always", "lineWidth": 0, "fillOpacity": 0, "thresholdsStyle": { "mode": "line" } },
-          "color": { "mode": "fixed", "fixedColor": "#868e96" },
-          "thresholds": { "mode": "absolute", "steps": [ { "color": "#868e96", "value": null }, { "color": "#7048e8", "value": 82 }, { "color": "#1c7ed6", "value": 93 }, { "color": "#37b24d", "value": 111 }, { "color": "#f5c400", "value": 133 }, { "color": "#f08c00", "value": 183 }, { "color": "#e6392f", "value": 278 } ] }
-        },
-        "overrides": []
-      },
-      "options": { "legend": { "showLegend": false }, "tooltip": { "mode": "single" } },
-      "targets": [
-        {
-          "refId": "A",
-          "query": "// Raw rpm/speed ratio = the signal gear is derived from. Only computed while moving\n// (speed >= 8) and pulling (rpm >= 800); below that the ratio is meaningless.\n// Threshold lines mark the six gear centroids. See infra/vps/grafana/README.md.\nfrom(bucket: \"telemetry\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"telemetry\" and (r._field == \"rpm\" or r._field == \"speed\"))\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)\n  |> pivot(rowKey: [\"_time\"], columnKey: [\"_field\"], valueColumn: \"_value\")\n  |> filter(fn: (r) => r.speed >= 8.0 and r.rpm >= 800.0)\n  |> map(fn: (r) => ({ _time: r._time, _field: \"ratio\", _value: r.rpm / r.speed }))"
         }
       ]
     }
