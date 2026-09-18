@@ -156,6 +156,12 @@ Only the broker's TLS port is exposed to the internet; the database, bridge, and
 
 **Isolate one variable at a time** — prove each layer before adding the next (`blink → serial → MQTT with fake data → real data → storage → viz`). **Always capture raw data.** **Design for the durable version now** (interfaces), build the simple version first (implementation). Where I over-engineer deliberately, I call it out as learning, not necessity.
 
+---
+
+## 📄 License
+
+MIT — © 2026 Naveena Pius ([naveenapius](https://github.com/naveenapius)). Free to use, modify, and build on; keep the copyright notice. See [LICENSE](LICENSE).
+
 <div align="center">
 <sub>Built in public · infrastructure is the profession, the motorcycle is the hook.</sub>
 </div>
