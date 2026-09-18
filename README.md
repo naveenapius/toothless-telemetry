@@ -2,7 +2,7 @@
 
 # 🏍️ Toothless Telemetry
 
-**A real-time telemetry & observability pipeline that pulls live data off a motorcycle, ships it over an authenticated TLS broker, and lands it in a time-series database.
+**A real-time telemetry & observability pipeline that pulls live data off a motorcycle, ships it over an authenticated TLS broker, and lands it in a time-series database — built end-to-end, in public.**
 
 ![Firmware](https://img.shields.io/badge/Firmware-C%2B%2B%20%2F%20Arduino-00599C?logo=cplusplus&logoColor=white)
 ![ESP32-S3](https://img.shields.io/badge/Edge-ESP32--S3-E7352C?logo=espressif&logoColor=white)
@@ -155,6 +155,12 @@ Only the broker's TLS port is exposed to the internet; the database, bridge, and
 ## 🧪 Engineering philosophy
 
 **Isolate one variable at a time** — prove each layer before adding the next (`blink → serial → MQTT with fake data → real data → storage → viz`). **Always capture raw data.** **Design for the durable version now** (interfaces), build the simple version first (implementation). Where I over-engineer deliberately, I call it out as learning, not necessity.
+
+---
+
+## 📄 License
+
+MIT — © 2026 Naveena Pius ([naveenapius](https://github.com/naveenapius)). Free to use, modify, and build on; keep the copyright notice. See [LICENSE](LICENSE).
 
 <div align="center">
 <sub>Built in public · infrastructure is the profession, the motorcycle is the hook.</sub>
