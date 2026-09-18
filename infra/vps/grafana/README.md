@@ -7,11 +7,17 @@ in detail, the **methodology behind the derived metrics** — currently **gear**
 
 ## Dashboard layout
 
-- **Top row — live stats:** RPM, Speed, Coolant, Battery (`last()` over a short window).
-- **Measured time-series:** RPM, Speed, Throttle, Coolant temperature, Battery voltage,
-  Engine load — each read straight from the `telemetry` measurement.
-- **Derived — Gear:** current gear (stat), gear-over-time (state timeline), and the raw
-  `rpm / speed` ratio with the gear centroids drawn as reference lines.
+- **Top row — live stats:** Gear, RPM, Speed, Coolant, Battery (`last()` over a short window).
+  Gear sits alongside the measured stats even though it is derived — the "now" glance row.
+- **Core graphs:** RPM, Speed, Gear over time (state timeline), and the raw `rpm / speed` ratio
+  with the gear centroids drawn as reference lines — the four views used to work out and sanity
+  check gear.
+- **Other measured time-series:** Throttle, Coolant temperature, Battery voltage, Engine load —
+  each read straight from the `telemetry` measurement.
+
+The gear stat and both gear graphs are computed in Flux from `rpm`/`speed`; the "now" stats
+(including Gear) read only the last few seconds, so they show "No data" when the bike is not
+actively streaming — that is expected, not an error.
 
 ## Measured vs. derived
 
