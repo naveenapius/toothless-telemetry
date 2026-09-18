@@ -117,12 +117,12 @@
       "title": "RPM",
       "datasource": { "type": "influxdb", "uid": "influxdb-telemetry" },
       "gridPos": { "h": 8, "w": 12, "x": 0, "y": 4 },
-      "fieldConfig": { "defaults": { "unit": "rotrpm", "custom": { "drawStyle": "line", "lineInterpolation": "smooth", "fillOpacity": 10, "showPoints": "never" } }, "overrides": [] },
+      "fieldConfig": { "defaults": { "unit": "rotrpm", "custom": { "drawStyle": "line", "lineInterpolation": "smooth", "fillOpacity": 10, "showPoints": "never", "spanNulls": 30000 } }, "overrides": [] },
       "options": { "legend": { "showLegend": false }, "tooltip": { "mode": "single" } },
       "targets": [
         {
           "refId": "A",
-          "query": "from(bucket: \"telemetry\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"telemetry\" and r._field == \"rpm\")\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)"
+          "query": "from(bucket: \"telemetry\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"telemetry\" and r._field == \"rpm\")\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: true)"
         }
       ]
     },
@@ -132,12 +132,12 @@
       "title": "Speed",
       "datasource": { "type": "influxdb", "uid": "influxdb-telemetry" },
       "gridPos": { "h": 8, "w": 12, "x": 12, "y": 4 },
-      "fieldConfig": { "defaults": { "unit": "velocitykmh", "custom": { "drawStyle": "line", "lineInterpolation": "smooth", "fillOpacity": 10, "showPoints": "never" } }, "overrides": [] },
+      "fieldConfig": { "defaults": { "unit": "velocitykmh", "custom": { "drawStyle": "line", "lineInterpolation": "smooth", "fillOpacity": 10, "showPoints": "never", "spanNulls": 30000 } }, "overrides": [] },
       "options": { "legend": { "showLegend": false }, "tooltip": { "mode": "single" } },
       "targets": [
         {
           "refId": "A",
-          "query": "from(bucket: \"telemetry\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"telemetry\" and r._field == \"speed\")\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)"
+          "query": "from(bucket: \"telemetry\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"telemetry\" and r._field == \"speed\")\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: true)"
         }
       ]
     },
@@ -163,7 +163,7 @@
       "targets": [
         {
           "refId": "A",
-          "query": "// Raw rpm/speed ratio = the signal gear is derived from (one point per sample, no averaging).\n// Only while moving (speed >= 8) and pulling (rpm >= 800); below that the ratio is meaningless.\n// Dashed threshold lines mark the six gear centroids. See infra/vps/grafana/README.md.\nfrom(bucket: \"telemetry\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"telemetry\" and (r._field == \"rpm\" or r._field == \"speed\"))\n  |> pivot(rowKey: [\"_time\"], columnKey: [\"_field\"], valueColumn: \"_value\")\n  |> filter(fn: (r) => r.speed >= 8.0 and r.rpm >= 800.0)\n  |> map(fn: (r) => ({ _time: r._time, _field: \"ratio\", _value: r.rpm / r.speed }))"
+          "query": "// Raw rpm/speed ratio = the signal gear is derived from (one point per sample, no averaging).\n// Only while moving (speed >= 8) and pulling (rpm >= 800); below that the ratio is meaningless.\n// Dashed threshold lines mark the six gear centroids. See infra/vps/grafana/README.md.\nfrom(bucket: \"telemetry\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"telemetry\" and (r._field == \"rpm\" or r._field == \"speed\"))\n  |> pivot(rowKey: [\"_time\"], columnKey: [\"_field\"], valueColumn: \"_value\")\n  |> filter(fn: (r) => r.speed >= 8.0 and r.rpm >= 800.0)\n  |> map(fn: (r) => ({ _time: r._time, _field: \"ratio\", _value: r.rpm / r.speed }))\n  |> aggregateWindow(every: v.windowPeriod, fn: last, createEmpty: false)"
         }
       ]
     },
@@ -180,7 +180,7 @@
           "decimals": 0,
           "min": -0.5,
           "max": 6.5,
-          "custom": { "drawStyle": "line", "lineInterpolation": "stepAfter", "lineWidth": 1, "showPoints": "always", "pointSize": 6, "fillOpacity": 0, "spanNulls": false, "axisLabel": "gear (0 = N)" },
+          "custom": { "drawStyle": "line", "lineInterpolation": "stepAfter", "lineWidth": 1, "showPoints": "always", "pointSize": 6, "fillOpacity": 0, "spanNulls": 30000, "axisLabel": "gear (0 = N)" },
           "color": { "mode": "thresholds" },
           "thresholds": { "mode": "absolute", "steps": [ { "color": "#868e96", "value": null }, { "color": "#e6392f", "value": 1 }, { "color": "#f08c00", "value": 2 }, { "color": "#f5c400", "value": 3 }, { "color": "#37b24d", "value": 4 }, { "color": "#1c7ed6", "value": 5 }, { "color": "#7048e8", "value": 6 } ] },
           "mappings": [ { "type": "value", "options": { "0": { "text": "N", "index": 0 }, "1": { "text": "1", "index": 1 }, "2": { "text": "2", "index": 2 }, "3": { "text": "3", "index": 3 }, "4": { "text": "4", "index": 4 }, "5": { "text": "5", "index": 5 }, "6": { "text": "6", "index": 6 } } } ]
@@ -191,7 +191,7 @@
       "targets": [
         {
           "refId": "A",
-          "query": "// Gear DERIVED per sample: gear = rpm/speed ratio -> nearest gear centroid (log-space);\n// thresholds below are the geometric-mean band boundaries. N (0) = stopped/crawling/clutch-in.\n// Plotted on the Y axis so gear position is meaningful; read against the ratio panel beside it.\n// See infra/vps/grafana/README.md.\nfrom(bucket: \"telemetry\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"telemetry\" and (r._field == \"rpm\" or r._field == \"speed\"))\n  |> pivot(rowKey: [\"_time\"], columnKey: [\"_field\"], valueColumn: \"_value\")\n  |> map(fn: (r) => ({ _time: r._time, _value:\n      if r.speed < 8.0 or r.rpm < 800.0 then 0.0\n      else if r.rpm / r.speed >= 225.6 then 1.0\n      else if r.rpm / r.speed >= 156.0 then 2.0\n      else if r.rpm / r.speed >= 121.5 then 3.0\n      else if r.rpm / r.speed >= 101.6 then 4.0\n      else if r.rpm / r.speed >= 87.3 then 5.0\n      else 6.0 }))\n  |> keep(columns: [\"_time\", \"_value\"])"
+          "query": "// Gear DERIVED per sample: gear = rpm/speed ratio -> nearest gear centroid (log-space);\n// thresholds below are the geometric-mean band boundaries. N (0) = stopped/crawling/clutch-in.\n// Plotted on the Y axis so gear position is meaningful; read against the ratio panel beside it.\n// See infra/vps/grafana/README.md.\nfrom(bucket: \"telemetry\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"telemetry\" and (r._field == \"rpm\" or r._field == \"speed\"))\n  |> pivot(rowKey: [\"_time\"], columnKey: [\"_field\"], valueColumn: \"_value\")\n  |> map(fn: (r) => ({ _time: r._time, _value:\n      if r.speed < 8.0 or r.rpm < 800.0 then 0.0\n      else if r.rpm / r.speed >= 225.6 then 1.0\n      else if r.rpm / r.speed >= 156.0 then 2.0\n      else if r.rpm / r.speed >= 121.5 then 3.0\n      else if r.rpm / r.speed >= 101.6 then 4.0\n      else if r.rpm / r.speed >= 87.3 then 5.0\n      else 6.0 }))\n  |> keep(columns: [\"_time\", \"_value\"])\n  |> aggregateWindow(every: v.windowPeriod, fn: last, createEmpty: true)"
         }
       ]
     },
@@ -201,12 +201,12 @@
       "title": "Throttle position",
       "datasource": { "type": "influxdb", "uid": "influxdb-telemetry" },
       "gridPos": { "h": 8, "w": 12, "x": 0, "y": 21 },
-      "fieldConfig": { "defaults": { "unit": "percent", "custom": { "drawStyle": "line", "lineInterpolation": "smooth", "fillOpacity": 10, "showPoints": "never" } }, "overrides": [] },
+      "fieldConfig": { "defaults": { "unit": "percent", "custom": { "drawStyle": "line", "lineInterpolation": "smooth", "fillOpacity": 10, "showPoints": "never", "spanNulls": 30000 } }, "overrides": [] },
       "options": { "legend": { "showLegend": false }, "tooltip": { "mode": "single" } },
       "targets": [
         {
           "refId": "A",
-          "query": "from(bucket: \"telemetry\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"telemetry\" and r._field == \"throttle\")\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)"
+          "query": "from(bucket: \"telemetry\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"telemetry\" and r._field == \"throttle\")\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: true)"
         }
       ]
     },
@@ -216,12 +216,12 @@
       "title": "Coolant temperature",
       "datasource": { "type": "influxdb", "uid": "influxdb-telemetry" },
       "gridPos": { "h": 8, "w": 12, "x": 12, "y": 21 },
-      "fieldConfig": { "defaults": { "unit": "celsius", "custom": { "drawStyle": "line", "lineInterpolation": "smooth", "fillOpacity": 10, "showPoints": "never" } }, "overrides": [] },
+      "fieldConfig": { "defaults": { "unit": "celsius", "custom": { "drawStyle": "line", "lineInterpolation": "smooth", "fillOpacity": 10, "showPoints": "never", "spanNulls": 30000 } }, "overrides": [] },
       "options": { "legend": { "showLegend": false }, "tooltip": { "mode": "single" } },
       "targets": [
         {
           "refId": "A",
-          "query": "from(bucket: \"telemetry\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"telemetry\" and r._field == \"coolant_temp\")\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)"
+          "query": "from(bucket: \"telemetry\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"telemetry\" and r._field == \"coolant_temp\")\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: true)"
         }
       ]
     },
@@ -231,12 +231,12 @@
       "title": "Battery voltage",
       "datasource": { "type": "influxdb", "uid": "influxdb-telemetry" },
       "gridPos": { "h": 8, "w": 12, "x": 0, "y": 29 },
-      "fieldConfig": { "defaults": { "unit": "volt", "decimals": 2, "custom": { "drawStyle": "line", "lineInterpolation": "smooth", "fillOpacity": 10, "showPoints": "never" } }, "overrides": [] },
+      "fieldConfig": { "defaults": { "unit": "volt", "decimals": 2, "custom": { "drawStyle": "line", "lineInterpolation": "smooth", "fillOpacity": 10, "showPoints": "never", "spanNulls": 30000 } }, "overrides": [] },
       "options": { "legend": { "showLegend": false }, "tooltip": { "mode": "single" } },
       "targets": [
         {
           "refId": "A",
-          "query": "from(bucket: \"telemetry\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"telemetry\" and r._field == \"module_voltage\")\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)"
+          "query": "from(bucket: \"telemetry\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"telemetry\" and r._field == \"module_voltage\")\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: true)"
         }
       ]
     },
@@ -246,12 +246,12 @@
       "title": "Engine load",
       "datasource": { "type": "influxdb", "uid": "influxdb-telemetry" },
       "gridPos": { "h": 8, "w": 12, "x": 12, "y": 29 },
-      "fieldConfig": { "defaults": { "unit": "percent", "custom": { "drawStyle": "line", "lineInterpolation": "smooth", "fillOpacity": 10, "showPoints": "never" } }, "overrides": [] },
+      "fieldConfig": { "defaults": { "unit": "percent", "custom": { "drawStyle": "line", "lineInterpolation": "smooth", "fillOpacity": 10, "showPoints": "never", "spanNulls": 30000 } }, "overrides": [] },
       "options": { "legend": { "showLegend": false }, "tooltip": { "mode": "single" } },
       "targets": [
         {
           "refId": "A",
-          "query": "from(bucket: \"telemetry\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"telemetry\" and r._field == \"engine_load\")\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)"
+          "query": "from(bucket: \"telemetry\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"telemetry\" and r._field == \"engine_load\")\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: true)"
         }
       ]
     }
