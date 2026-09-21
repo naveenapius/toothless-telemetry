@@ -13,20 +13,30 @@
 // not cut power until the backlog has drained (see the LED table below). A
 // durable flash/SD backing is a later swap behind the same append/drain API.
 //
-// STATUS via the onboard RGB LED (no serial on the bike). Checked in priority order:
-//   blinking YELLOW = hotspot (WiFi) not connected
+// STATUS via the onboard RGB LED (no serial on the bike). Checked in priority
+// order — the LED shows the FRONTIER (highest state reached / what's blocking):
+//   blinking YELLOW = boot / hotspot (WiFi) not connected — nothing up yet
 //   blinking PURPLE = WiFi up, MQTT/TLS to the broker not connected
 //   blinking BLUE   = broker up, ELM327 BLE not connected
 //   static  RED     = all links up, but the bike is not answering (engine off?)
-//   blinking GREEN  = receiving data, queue still draining (backlog pending)
-//   static  GREEN   = receiving data AND queue empty — everything sent, safe to cut power
+//   WHITE           = transmitting bike data, NO GPS fix
+//                       (static = queue empty / safe to cut power; blinking = draining)
+//   GREEN           = transmitting bike data WITH a GPS fix
+//                       (static = queue empty / safe to cut power; blinking = draining)
 // At boot each stage flashes then shows its color solid briefly as a "passed" tick.
+//
+// GPS: a u-blox NEO-7M streams NMEA on UART1 (RX=GPIO17 <- 7M TX, TX=GPIO18 -> 7M
+// RX, 9600 baud). Its lat/lon/gps_speed/course/satellites/hdop are folded into each bundled
+// message WHEN a fix is valid (each field guarded independently — omitted when not,
+// same sparse-record discipline as the PIDs). SNTP stays the clock source; GPS time
+// is not used. No fix simply means those fields are absent — nothing else changes.
 
 #include <Arduino.h>
 #include <WiFi.h>
 #include <WiFiClientSecure.h>
 #include <PubSubClient.h>
 #include <NimBLEDevice.h>
+#include <TinyGPSPlus.h>
 #include <time.h>
 #include <esp_heap_caps.h>
 #include "config.h"
@@ -41,26 +51,37 @@ static const NimBLEUUID SVC_UUID((uint16_t)0xFFF0);
 static const NimBLEUUID WRITE_UUID((uint16_t)0xFFF2);   // Mac/ESP -> dongle
 static const NimBLEUUID NOTIFY_UUID((uint16_t)0xFFF1);  // dongle -> Mac/ESP
 
+// ---- GPS (u-blox NEO-7M on UART1) -------------------------------------------
+// UART0 is the USB/COM debug console; the modem (later) takes UART2 — no conflict.
+static const int GPS_RX_PIN = 17;      // ESP32 RX  <- NEO-7M TX (data: GPS -> ESP32)
+static const int GPS_TX_PIN = 18;      // ESP32 TX  -> NEO-7M RX (config; unused for now)
+static const uint32_t GPS_BAUD = 9600; // NEO-7M factory default
+TinyGPSPlus  gps;
+HardwareSerial GPS(1);
+
 // =====================  LED  ================================================
 inline void led(uint8_t r, uint8_t g, uint8_t b) { neopixelWrite(RGB_BUILTIN, r, g, b); }
 static inline bool blinkOn() { return (millis() / 300) & 1; }   // ~1.6 Hz blink phase
-// Brightness is HIGH on purpose. WiFi modem-sleep is required for WiFi+BLE
-// coexistence, so the radio current dips between activity and a power bank's
-// low-current auto-shutoff can trip. A bright, always-lit LED provides a steady
-// current floor to prevent that — and the blink "off" phase stays DIMLY lit (LO,
-// not 0) so even a blinking state never drops the floor to zero.
-static const uint8_t HI = 200, LO = 10;
+// Brightness is intentionally LOW now. It used to be high as a power-bank current
+// floor (WiFi modem-sleep — required for WiFi+BLE coexistence — lets idle current
+// dip, and a bank's low-current auto-shutoff can then trip). The NEO-7M's steady
+// ~45 mA draw now holds that floor on its own, so the LED no longer has to. The
+// blink "off" phase still stays DIMLY lit (LO, not 0) rather than fully dark.
+static const uint8_t HI = 60, LO = 3;
 static void ledYellow(bool solid){ bool on=solid||blinkOn(); led(on?HI:LO, on?(HI*3/5):0, 0); }
 static void ledPurple(bool solid){ bool on=solid||blinkOn(); led(on?(HI*4/5):LO, 0, on?HI:LO); }
 static void ledBlue  (bool solid){ bool on=solid||blinkOn(); led(0, 0, on?HI:LO); }
 static void ledRed   (){ led(HI, 0, 0); }
 static void ledGreen (bool solid){ bool on=solid||blinkOn(); led(0, on?HI:LO, 0); }
+static void ledWhite (bool solid){ bool on=solid||blinkOn(); uint8_t v=on?HI:LO; led(v, v, v); }
 
 // =====================  PSRAM store-and-forward queue  ======================
 // Fixed-slot ring buffer. Append/drain interface is the whole contract — the
 // PSRAM backing here can later be swapped for flash/SD without touching callers.
-#define Q_SLOTS   20000               // ~5.5 h at 1 msg/s; ~4.5 MB in PSRAM
-#define Q_MSG_CAP 224                 // max bytes per bundled JSON message (incl. NUL)
+#define Q_SLOTS   20000               // ~5.5 h at 1 msg/s; ~5.8 MB in PSRAM
+#define Q_MSG_CAP 288                 // max bytes per bundled JSON message (incl. NUL).
+                                      // 8 PIDs (~172B) + GPS lat/lon/gps_speed/course/
+                                      // sats/hdop (~90B) worst-case ~263B — 288 leaves headroom.
 
 struct RideQueue {
   char*  store = nullptr;
@@ -267,8 +288,23 @@ static bool pollCycle() {
       gotAny = true;
     }
   }
+  // GPS rides along when a fix is valid — each field guarded independently so a
+  // partial fix still contributes what it has (sparse-record discipline; omitted,
+  // never stale/zero, when invalid). Decimal degrees straight from TinyGPS++.
+  if (gps.location.isValid())
+    n += snprintf(msg + n, sizeof(msg) - n, ",\"lat\":%.6f,\"lon\":%.6f",
+                  gps.location.lat(), gps.location.lng());
+  if (gps.speed.isValid())
+    n += snprintf(msg + n, sizeof(msg) - n, ",\"gps_speed\":%.1f", gps.speed.kmph());
+  if (gps.course.isValid())
+    n += snprintf(msg + n, sizeof(msg) - n, ",\"course\":%.1f", gps.course.deg());
+  if (gps.satellites.isValid())
+    n += snprintf(msg + n, sizeof(msg) - n, ",\"satellites\":%d", (int)gps.satellites.value());
+  if (gps.hdop.isValid())
+    n += snprintf(msg + n, sizeof(msg) - n, ",\"hdop\":%.1f", gps.hdop.hdop());
+
   snprintf(msg + n, sizeof(msg) - n, "}");
-  if (gotAny) queue.append(msg);       // only enqueue cycles that actually carried data
+  if (gotAny) queue.append(msg);       // only enqueue cycles that actually carried bike data
   return gotAny;
 }
 
@@ -338,6 +374,13 @@ void setup() {
   if (!queue.begin()) Serial.println("QUEUE: alloc FAILED");
   else Serial.printf("QUEUE: %u slots in %s\n", (unsigned)queue.cap, queue.inPsram ? "PSRAM" : "internal RAM");
 
+  // GPS streams from power-on; it's a passenger (never blocks bring-up). We don't
+  // pump it during the blocking bring-up below, so the UART FIFO may drop the first
+  // few NMEA sentences — harmless, TinyGPS++ re-syncs once loop() starts reading.
+  GPS.begin(GPS_BAUD, SERIAL_8N1, GPS_RX_PIN, GPS_TX_PIN);
+  Serial.printf("GPS: UART1 @ %lu baud, RX=GPIO%d TX=GPIO%d\n",
+                (unsigned long)GPS_BAUD, GPS_RX_PIN, GPS_TX_PIN);
+
   bringUpWifi();       // 1. hotspot   (yellow)
   syncTime();          //    correct clock BEFORE TLS, or cert validation fails
   bringUpMqtt();       // 2. broker    (purple)
@@ -348,6 +391,10 @@ static unsigned long lastPoll = 0;
 static bool lastHadData = false;
 
 void loop() {
+  // --- GPS: drain the UART every iteration (the FIFO is tiny; read once a second
+  //     and we'd drop bytes and corrupt sentences). TinyGPS++ parses incrementally. ---
+  while (GPS.available() > 0) gps.encode(GPS.read());
+
   // --- network upkeep, all non-blocking so acquisition never stalls on it ---
   if (WiFi.status() == WL_CONNECTED && !mqtt.connected()) tryMqtt();
   if (mqtt.connected()) mqtt.loop();
@@ -366,13 +413,14 @@ void loop() {
   // --- drain the backlog whenever the broker is reachable -------------------
   if (mqtt.connected()) drain();
 
-  // --- status LED (priority order) -----------------------------------------
-  if (WiFi.status() != WL_CONNECTED)      ledYellow(false);
-  else if (!mqtt.connected())             ledPurple(false);
-  else if (!bleConnected)                 ledBlue(false);
-  else if (!lastHadData)                  ledRed();
-  else if (queue.count > 0)               ledGreen(false);   // draining backlog
-  else                                    ledGreen(true);    // caught up — safe to cut power
+  // --- status LED (priority order — show the frontier / what's blocking) -----
+  bool draining = queue.count > 0;           // solid = caught up, blink = backlog pending
+  if (WiFi.status() != WL_CONNECTED)      ledYellow(false);            // boot / no hotspot
+  else if (!mqtt.connected())             ledPurple(false);           // broker not up
+  else if (!bleConnected)                 ledBlue(false);             // dongle not up
+  else if (!lastHadData)                  ledRed();                   // engine off (no bike data)
+  else if (gps.location.isValid())        ledGreen(!draining);        // transmitting + GPS fix
+  else                                    ledWhite(!draining);        // transmitting, no GPS fix
 
   delay(5);
 }

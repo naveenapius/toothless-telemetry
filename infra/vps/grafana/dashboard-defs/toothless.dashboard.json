@@ -4,7 +4,7 @@
   "tags": ["toothless", "telemetry"],
   "timezone": "browser",
   "schemaVersion": 39,
-  "version": 4,
+  "version": 5,
   "editable": true,
   "refresh": "1s",
   "time": { "from": "now-15m", "to": "now" },
@@ -41,7 +41,7 @@
       "type": "stat",
       "title": "RPM (now)",
       "datasource": { "type": "influxdb", "uid": "influxdb-telemetry" },
-      "gridPos": { "h": 4, "w": 5, "x": 4, "y": 0 },
+      "gridPos": { "h": 4, "w": 4, "x": 4, "y": 0 },
       "fieldConfig": { "defaults": { "unit": "rotrpm", "color": { "mode": "thresholds" } }, "overrides": [] },
       "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "value", "graphMode": "area" },
       "targets": [
@@ -56,7 +56,7 @@
       "type": "stat",
       "title": "Speed (now)",
       "datasource": { "type": "influxdb", "uid": "influxdb-telemetry" },
-      "gridPos": { "h": 4, "w": 5, "x": 9, "y": 0 },
+      "gridPos": { "h": 4, "w": 4, "x": 8, "y": 0 },
       "fieldConfig": { "defaults": { "unit": "velocitykmh", "color": { "mode": "thresholds" } }, "overrides": [] },
       "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "value", "graphMode": "area" },
       "targets": [
@@ -71,7 +71,7 @@
       "type": "stat",
       "title": "Coolant (now)",
       "datasource": { "type": "influxdb", "uid": "influxdb-telemetry" },
-      "gridPos": { "h": 4, "w": 5, "x": 14, "y": 0 },
+      "gridPos": { "h": 4, "w": 4, "x": 12, "y": 0 },
       "fieldConfig": {
         "defaults": {
           "unit": "celsius",
@@ -93,7 +93,7 @@
       "type": "stat",
       "title": "Battery (now)",
       "datasource": { "type": "influxdb", "uid": "influxdb-telemetry" },
-      "gridPos": { "h": 4, "w": 5, "x": 19, "y": 0 },
+      "gridPos": { "h": 4, "w": 4, "x": 16, "y": 0 },
       "fieldConfig": {
         "defaults": {
           "unit": "volt",
@@ -108,6 +108,22 @@
         {
           "refId": "A",
           "query": "from(bucket: \"telemetry\")\n  |> range(start: -10s)\n  |> filter(fn: (r) => r._measurement == \"telemetry\" and r._field == \"module_voltage\")\n  |> last()"
+        }
+      ]
+    },
+    {
+      "id": 15,
+      "type": "stat",
+      "title": "GPS speed (now)",
+      "description": "True ground speed from the NEO-7M (Doppler). Independent of the OBD wheel-speed; blank until a GPS fix.",
+      "datasource": { "type": "influxdb", "uid": "influxdb-telemetry" },
+      "gridPos": { "h": 4, "w": 4, "x": 20, "y": 0 },
+      "fieldConfig": { "defaults": { "unit": "velocitykmh", "color": { "mode": "thresholds" } }, "overrides": [] },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "value", "graphMode": "area" },
+      "targets": [
+        {
+          "refId": "A",
+          "query": "from(bucket: \"telemetry\")\n  |> range(start: -10s)\n  |> filter(fn: (r) => r._measurement == \"telemetry\" and r._field == \"gps_speed\")\n  |> last()"
         }
       ]
     },
@@ -196,11 +212,69 @@
       ]
     },
     {
+      "id": 16,
+      "type": "geomap",
+      "title": "GPS track",
+      "description": "Ride path from the NEO-7M (lat/lon). Small dots = the trail over the time range; the large red dot is the current position. Blank until a GPS fix.",
+      "datasource": { "type": "influxdb", "uid": "influxdb-telemetry" },
+      "gridPos": { "h": 9, "w": 12, "x": 0, "y": 21 },
+      "fieldConfig": { "defaults": {}, "overrides": [] },
+      "options": {
+        "view": { "id": "fit", "lat": 0, "lon": 0, "zoom": 15 },
+        "controls": { "showZoom": true, "mouseWheelZoom": true, "showAttribution": true, "showScale": false, "showDebug": false },
+        "basemap": { "type": "default", "name": "Basemap" },
+        "layers": [
+          {
+            "type": "markers",
+            "name": "Trail",
+            "location": { "mode": "coords", "latitude": "lat", "longitude": "lon" },
+            "filterData": { "id": "byRefIds", "options": ["A"] },
+            "config": { "style": { "size": { "fixed": 4 }, "color": { "fixed": "#1c7ed6" }, "opacity": 0.5, "symbol": { "fixed": "img/icons/marker/circle.svg", "mode": "fixed" }, "symbolAlign": { "horizontal": "center", "vertical": "center" } }, "showLegend": false },
+            "tooltip": true
+          },
+          {
+            "type": "markers",
+            "name": "Current",
+            "location": { "mode": "coords", "latitude": "lat", "longitude": "lon" },
+            "filterData": { "id": "byRefIds", "options": ["B"] },
+            "config": { "style": { "size": { "fixed": 10 }, "color": { "fixed": "#e6392f" }, "opacity": 0.9, "symbol": { "fixed": "img/icons/marker/circle.svg", "mode": "fixed" }, "symbolAlign": { "horizontal": "center", "vertical": "center" } }, "showLegend": false },
+            "tooltip": true
+          }
+        ]
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "query": "// Trail: every GPS point in the time range. lat/lon are pivoted into one row each\n// so the Geomap coords layer reads both. Rows without a fix are dropped by pivot.\nfrom(bucket: \"telemetry\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"telemetry\" and (r._field == \"lat\" or r._field == \"lon\"))\n  |> pivot(rowKey: [\"_time\"], columnKey: [\"_field\"], valueColumn: \"_value\")\n  |> keep(columns: [\"_time\", \"lat\", \"lon\"])"
+        },
+        {
+          "refId": "B",
+          "query": "// Current position: the most recent fix only (the large red dot).\nfrom(bucket: \"telemetry\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"telemetry\" and (r._field == \"lat\" or r._field == \"lon\"))\n  |> pivot(rowKey: [\"_time\"], columnKey: [\"_field\"], valueColumn: \"_value\")\n  |> keep(columns: [\"_time\", \"lat\", \"lon\"])\n  |> sort(columns: [\"_time\"])\n  |> tail(n: 1)"
+        }
+      ]
+    },
+    {
+      "id": 17,
+      "type": "timeseries",
+      "title": "GPS speed",
+      "description": "Ground speed from the NEO-7M (Doppler). Compare against the OBD 'Speed' panel: wheel-speed vs ground-speed divergence hints at slip. Blank until a GPS fix.",
+      "datasource": { "type": "influxdb", "uid": "influxdb-telemetry" },
+      "gridPos": { "h": 9, "w": 12, "x": 12, "y": 21 },
+      "fieldConfig": { "defaults": { "unit": "velocitykmh", "custom": { "drawStyle": "line", "lineInterpolation": "smooth", "fillOpacity": 10, "showPoints": "never", "spanNulls": 30000 } }, "overrides": [] },
+      "options": { "legend": { "showLegend": false }, "tooltip": { "mode": "single" } },
+      "targets": [
+        {
+          "refId": "A",
+          "query": "from(bucket: \"telemetry\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"telemetry\" and r._field == \"gps_speed\")\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: true)"
+        }
+      ]
+    },
+    {
       "id": 7,
       "type": "timeseries",
       "title": "Throttle position",
       "datasource": { "type": "influxdb", "uid": "influxdb-telemetry" },
-      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 21 },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 30 },
       "fieldConfig": { "defaults": { "unit": "percent", "custom": { "drawStyle": "line", "lineInterpolation": "smooth", "fillOpacity": 10, "showPoints": "never", "spanNulls": 30000 } }, "overrides": [] },
       "options": { "legend": { "showLegend": false }, "tooltip": { "mode": "single" } },
       "targets": [
@@ -215,7 +289,7 @@
       "type": "timeseries",
       "title": "Coolant temperature",
       "datasource": { "type": "influxdb", "uid": "influxdb-telemetry" },
-      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 21 },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 30 },
       "fieldConfig": { "defaults": { "unit": "celsius", "custom": { "drawStyle": "line", "lineInterpolation": "smooth", "fillOpacity": 10, "showPoints": "never", "spanNulls": 30000 } }, "overrides": [] },
       "options": { "legend": { "showLegend": false }, "tooltip": { "mode": "single" } },
       "targets": [
@@ -230,7 +304,7 @@
       "type": "timeseries",
       "title": "Battery voltage",
       "datasource": { "type": "influxdb", "uid": "influxdb-telemetry" },
-      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 29 },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 38 },
       "fieldConfig": { "defaults": { "unit": "volt", "decimals": 2, "custom": { "drawStyle": "line", "lineInterpolation": "smooth", "fillOpacity": 10, "showPoints": "never", "spanNulls": 30000 } }, "overrides": [] },
       "options": { "legend": { "showLegend": false }, "tooltip": { "mode": "single" } },
       "targets": [
@@ -245,7 +319,7 @@
       "type": "timeseries",
       "title": "Engine load",
       "datasource": { "type": "influxdb", "uid": "influxdb-telemetry" },
-      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 29 },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 38 },
       "fieldConfig": { "defaults": { "unit": "percent", "custom": { "drawStyle": "line", "lineInterpolation": "smooth", "fillOpacity": 10, "showPoints": "never", "spanNulls": 30000 } }, "overrides": [] },
       "options": { "legend": { "showLegend": false }, "tooltip": { "mode": "single" } },
       "targets": [
