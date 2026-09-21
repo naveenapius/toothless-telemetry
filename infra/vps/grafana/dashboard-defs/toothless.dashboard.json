@@ -4,7 +4,7 @@
   "tags": ["toothless", "telemetry"],
   "timezone": "browser",
   "schemaVersion": 39,
-  "version": 5,
+  "version": 6,
   "editable": true,
   "refresh": "1s",
   "time": { "from": "now-15m", "to": "now" },
@@ -222,7 +222,7 @@
       "options": {
         "view": { "id": "fit", "lat": 0, "lon": 0, "zoom": 15 },
         "controls": { "showZoom": true, "mouseWheelZoom": true, "showAttribution": true, "showScale": false, "showDebug": false },
-        "basemap": { "type": "default", "name": "Basemap" },
+        "basemap": { "type": "osm-standard", "name": "OpenStreetMap" },
         "layers": [
           {
             "type": "markers",
