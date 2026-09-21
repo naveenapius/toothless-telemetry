@@ -4,7 +4,7 @@
   "tags": ["toothless", "telemetry"],
   "timezone": "browser",
   "schemaVersion": 39,
-  "version": 6,
+  "version": 7,
   "editable": true,
   "refresh": "1s",
   "time": { "from": "now-15m", "to": "now" },
@@ -215,7 +215,7 @@
       "id": 16,
       "type": "geomap",
       "title": "GPS track",
-      "description": "Ride path from the NEO-7M (lat/lon). Small dots = the trail over the time range; the large red dot is the current position. Blank until a GPS fix.",
+      "description": "Ride path from the NEO-7M (lat/lon) over the time range. Newest point is the leading edge of the trail. Blank until a GPS fix.",
       "datasource": { "type": "influxdb", "uid": "influxdb-telemetry" },
       "gridPos": { "h": 9, "w": 12, "x": 0, "y": 21 },
       "fieldConfig": { "defaults": {}, "overrides": [] },
@@ -226,18 +226,9 @@
         "layers": [
           {
             "type": "markers",
-            "name": "Trail",
+            "name": "GPS track",
             "location": { "mode": "coords", "latitude": "lat", "longitude": "lon" },
-            "filterData": { "id": "byRefIds", "options": ["A"] },
-            "config": { "style": { "size": { "fixed": 4 }, "color": { "fixed": "#1c7ed6" }, "opacity": 0.5, "symbol": { "fixed": "img/icons/marker/circle.svg", "mode": "fixed" }, "symbolAlign": { "horizontal": "center", "vertical": "center" } }, "showLegend": false },
-            "tooltip": true
-          },
-          {
-            "type": "markers",
-            "name": "Current",
-            "location": { "mode": "coords", "latitude": "lat", "longitude": "lon" },
-            "filterData": { "id": "byRefIds", "options": ["B"] },
-            "config": { "style": { "size": { "fixed": 10 }, "color": { "fixed": "#e6392f" }, "opacity": 0.9, "symbol": { "fixed": "img/icons/marker/circle.svg", "mode": "fixed" }, "symbolAlign": { "horizontal": "center", "vertical": "center" } }, "showLegend": false },
+            "config": { "style": { "size": { "fixed": 5 }, "color": { "fixed": "#1c7ed6" }, "opacity": 0.7, "symbol": { "fixed": "img/icons/marker/circle.svg", "mode": "fixed" }, "symbolAlign": { "horizontal": "center", "vertical": "center" } }, "showLegend": false },
             "tooltip": true
           }
         ]
@@ -245,11 +236,7 @@
       "targets": [
         {
           "refId": "A",
-          "query": "// Trail: every GPS point in the time range. lat/lon are pivoted into one row each\n// so the Geomap coords layer reads both. Rows without a fix are dropped by pivot.\nfrom(bucket: \"telemetry\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"telemetry\" and (r._field == \"lat\" or r._field == \"lon\"))\n  |> pivot(rowKey: [\"_time\"], columnKey: [\"_field\"], valueColumn: \"_value\")\n  |> keep(columns: [\"_time\", \"lat\", \"lon\"])"
-        },
-        {
-          "refId": "B",
-          "query": "// Current position: the most recent fix only (the large red dot).\nfrom(bucket: \"telemetry\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"telemetry\" and (r._field == \"lat\" or r._field == \"lon\"))\n  |> pivot(rowKey: [\"_time\"], columnKey: [\"_field\"], valueColumn: \"_value\")\n  |> keep(columns: [\"_time\", \"lat\", \"lon\"])\n  |> sort(columns: [\"_time\"])\n  |> tail(n: 1)"
+          "query": "// Every GPS point in the time range. lat/lon are pivoted into one row so the\n// Geomap coords layer (latitude=lat, longitude=lon) reads both from one frame.\nfrom(bucket: \"telemetry\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"telemetry\" and (r._field == \"lat\" or r._field == \"lon\"))\n  |> pivot(rowKey: [\"_time\"], columnKey: [\"_field\"], valueColumn: \"_value\")\n  |> keep(columns: [\"_time\", \"lat\", \"lon\"])"
         }
       ]
     },
