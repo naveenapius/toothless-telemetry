@@ -25,7 +25,7 @@
 //                       (static = queue empty / safe to cut power; blinking = draining)
 // At boot each stage flashes then shows its color solid briefly as a "passed" tick.
 //
-// GPS: a u-blox NEO-7M streams NMEA on UART1 (RX=GPIO17 <- 7M TX, TX=GPIO18 -> 7M
+// GPS: a u-blox NEO-7M streams NMEA on UART1 (RX=GPIO18 <- 7M TX, TX=GPIO17 -> 7M
 // RX, 9600 baud). Its lat/lon/gps_speed/course/satellites/hdop are folded into each bundled
 // message WHEN a fix is valid (each field guarded independently — omitted when not,
 // same sparse-record discipline as the PIDs). SNTP stays the clock source; GPS time
@@ -53,8 +53,8 @@ static const NimBLEUUID NOTIFY_UUID((uint16_t)0xFFF1);  // dongle -> Mac/ESP
 
 // ---- GPS (u-blox NEO-7M on UART1) -------------------------------------------
 // UART0 is the USB/COM debug console; the modem (later) takes UART2 — no conflict.
-static const int GPS_RX_PIN = 17;      // ESP32 RX  <- NEO-7M TX (data: GPS -> ESP32)
-static const int GPS_TX_PIN = 18;      // ESP32 TX  -> NEO-7M RX (config; unused for now)
+static const int GPS_RX_PIN = 18;      // ESP32 RX  <- NEO-7M TX (data: GPS -> ESP32)
+static const int GPS_TX_PIN = 17;      // ESP32 TX  -> NEO-7M RX (config; unused for now)
 static const uint32_t GPS_BAUD = 9600; // NEO-7M factory default
 TinyGPSPlus  gps;
 HardwareSerial GPS(1);
